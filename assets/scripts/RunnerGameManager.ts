@@ -1,5 +1,6 @@
 import {
     _decorator,
+    Collider2D,
     Component,
     EventKeyboard,
     EventMouse,
@@ -9,18 +10,30 @@ import {
     KeyCode,
     Label,
     Node,
+    Prefab,
+    Sprite,
+    instantiate,
     tween,
     UIOpacity,
+    UITransform,
     Vec3,
 } from 'cc';
+import { RunnerEvadeButtonPulse } from './RunnerEvadeButtonPulse';
+import { RunnerGameOverScreen } from './RunnerGameOverScreen';
+import { RunnerDownloadButtonStretch } from './RunnerDownloadButtonStretch';
 
 const { ccclass, property } = _decorator;
 
 @ccclass('RunnerGameManager')
 export class RunnerGameManager extends Component {
     static isStarted = false;
+    static isFinished = false;
+    static isFinishing = false;
+    static isFinishSpawned = false;
     static shouldConsumeStartInput = false;
     private static instance: RunnerGameManager | null = null;
+    private static hasShownFirstEnemyHint = false;
+    private static shouldJumpAfterFirstEnemyHint = false;
 
     @property(Node)
     hintFinger: Node | null = null;
@@ -30,6 +43,9 @@ export class RunnerGameManager extends Component {
 
     @property
     startText = 'Tap to start\ngaming!';
+
+    @property
+    firstEnemyHintText = 'Jump to avoid enemies';
 
     @property
     fingerMinScale = 0.85;
@@ -46,16 +62,89 @@ export class RunnerGameManager extends Component {
     @property([Node])
     hearts: Node[] = [];
 
+    @property(Node)
+    heartsRoot: Node | null = null;
+
     @property
     maxHealth = 3;
 
     @property
     damageCooldown = 0.8;
 
+    @property
+    damagedHeartOpacity = 80;
+
+    @property
+    heartFadeDuration = 0.25;
+
+    @property(Node)
+    collectTarget: Node | null = null;
+
+    @property(Label)
+    scoreLabel: Label | null = null;
+
+    @property
+    scorePrefix = '$';
+
+    @property
+    collectFlyDuration = 0.5;
+
+    @property
+    collectPopScale = 1.25;
+
+    @property
+    collectEndScale = 0.12;
+
+    @property(Prefab)
+    failPrefab: Prefab | null = null;
+
+    @property(Node)
+    failContainer: Node | null = null;
+
+    @property(Prefab)
+    gameOverPrefab: Prefab | null = null;
+
+    @property(Node)
+    gameOverContainer: Node | null = null;
+
+    @property
+    gameOverDelay = 0.8;
+
+    @property(Prefab)
+    winGamePrefab: Prefab | null = null;
+
+    @property(Node)
+    winGameContainer: Node | null = null;
+
+    @property
+    winGameDelay = 0.2;
+
+    @property
+    winTitleText = 'Congratulations!\nChoose your reward!';
+
+    @property
+    winButtonText = 'INSTALL AND EARN';
+
+    @property
+    failStartScale = 0.15;
+
+    @property
+    failOvershootScale = 1.2;
+
+    @property
+    failPopDuration = 0.18;
+
+    @property
+    failSettleDuration = 0.12;
+
     private fingerStartScale = new Vec3(1, 1, 1);
     private started = false;
+    private isFirstEnemyPaused = false;
     private health = 0;
+    private score = 0;
+    private failShown = false;
     private lastDamageTime = -Infinity;
+    private readonly collectedNodes = new Set<Node>();
     private readonly preventContextMenu = (event: Event) => {
         event.preventDefault();
     };
@@ -63,8 +152,19 @@ export class RunnerGameManager extends Component {
     onLoad() {
         RunnerGameManager.instance = this;
         RunnerGameManager.isStarted = false;
+        RunnerGameManager.isFinished = false;
+        RunnerGameManager.isFinishing = false;
+        RunnerGameManager.isFinishSpawned = false;
         RunnerGameManager.shouldConsumeStartInput = false;
+        RunnerGameManager.hasShownFirstEnemyHint = false;
+        RunnerGameManager.shouldJumpAfterFirstEnemyHint = false;
+        this.resolveHearts();
         this.health = this.resolveMaxHealth();
+        this.resolveCollectTarget();
+        this.resolveScoreLabel();
+        this.updateScoreLabel();
+        this.attachEvadeButtonPulses();
+        this.attachDownloadButtonStretch();
         this.lastDamageTime = -Infinity;
         this.updateHearts();
 
@@ -127,6 +227,11 @@ export class RunnerGameManager extends Component {
     }
 
     private onFirstInput() {
+        if (this.isFirstEnemyPaused) {
+            this.resumeFromFirstEnemyHint();
+            return;
+        }
+
         if (this.started) {
             return;
         }
@@ -150,8 +255,44 @@ export class RunnerGameManager extends Component {
         RunnerGameManager.instance?.takeDamage(amount);
     }
 
+    static finishGame(delay = 0) {
+        RunnerGameManager.instance?.finishGame(delay);
+    }
+
+    static markFinishSpawned() {
+        RunnerGameManager.isFinishSpawned = true;
+    }
+
+    static collectNode(node: Node, value = 10) {
+        return RunnerGameManager.instance?.collectNode(node, value) ?? false;
+    }
+
+    static getCollectTarget() {
+        return RunnerGameManager.instance?.resolveCollectTarget() ?? null;
+    }
+
+    static consumeFirstEnemyHintJump() {
+        if (!RunnerGameManager.shouldJumpAfterFirstEnemyHint) {
+            return false;
+        }
+
+        RunnerGameManager.shouldJumpAfterFirstEnemyHint = false;
+        return true;
+    }
+
+    static pauseForFirstEnemy() {
+        const manager = RunnerGameManager.instance;
+        if (!manager || RunnerGameManager.hasShownFirstEnemyHint || !RunnerGameManager.isStarted) {
+            return false;
+        }
+
+        RunnerGameManager.hasShownFirstEnemyHint = true;
+        manager.showFirstEnemyHint();
+        return true;
+    }
+
     private takeDamage(amount: number) {
-        if (!RunnerGameManager.isStarted || this.health <= 0) {
+        if (!RunnerGameManager.isStarted || RunnerGameManager.isFinished || RunnerGameManager.isFinishing || this.health <= 0) {
             return;
         }
 
@@ -162,10 +303,11 @@ export class RunnerGameManager extends Component {
 
         this.lastDamageTime = now;
         this.health = Math.max(0, this.health - amount);
-        this.updateHearts();
+        this.updateHearts(true);
 
         if (this.health <= 0) {
             RunnerGameManager.isStarted = false;
+            this.showFail();
         }
     }
 
@@ -177,15 +319,373 @@ export class RunnerGameManager extends Component {
         return Math.max(1, this.maxHealth);
     }
 
-    private updateHearts() {
+    private attachEvadeButtonPulses() {
+        this.attachEvadeButtonPulsesIn(this.node.scene);
+    }
+
+    private attachDownloadButtonStretch() {
+        this.attachDownloadButtonStretchIn(this.node.scene);
+    }
+
+    private attachEvadeButtonPulsesIn(node: Node | null) {
+        if (!node) {
+            return;
+        }
+
+        if (/^evade$/i.test(node.name) && !node.getComponent(RunnerEvadeButtonPulse)) {
+            node.addComponent(RunnerEvadeButtonPulse);
+        }
+
+        node.children.forEach((child) => this.attachEvadeButtonPulsesIn(child));
+    }
+
+    private attachDownloadButtonStretchIn(node: Node | null) {
+        if (!node) {
+            return;
+        }
+
+        if (/^download$/i.test(node.name) && !node.getComponent(RunnerDownloadButtonStretch)) {
+            node.addComponent(RunnerDownloadButtonStretch);
+        }
+
+        node.children.forEach((child) => this.attachDownloadButtonStretchIn(child));
+    }
+
+    private showFail() {
+        if (this.failShown) {
+            return;
+        }
+
+        this.failShown = true;
+
+        if (!this.failPrefab) {
+            return;
+        }
+
+        const fail = instantiate(this.failPrefab);
+        const container = this.failContainer ?? this.node.parent ?? this.node.scene;
+        container.addChild(fail);
+        fail.setPosition(0, 0, 0);
+
+        const finalScale = fail.scale.clone();
+        fail.setScale(finalScale.clone().multiplyScalar(this.failStartScale));
+
+        tween(fail)
+            .to(this.failPopDuration, { scale: finalScale.clone().multiplyScalar(this.failOvershootScale) }, { easing: 'backOut' })
+            .to(this.failSettleDuration, { scale: finalScale }, { easing: 'sineOut' })
+            .call(() => {
+                this.scheduleOnce(() => this.showGameOver(), this.gameOverDelay);
+            })
+            .start();
+    }
+
+    private finishGame(delay: number) {
+        if (RunnerGameManager.isFinished || RunnerGameManager.isFinishing) {
+            return;
+        }
+
+        if (delay > 0) {
+            RunnerGameManager.isFinishing = true;
+            RunnerGameManager.shouldConsumeStartInput = false;
+            RunnerGameManager.shouldJumpAfterFirstEnemyHint = false;
+            this.scheduleOnce(() => this.completeFinish(), delay);
+            return;
+        }
+
+        this.completeFinish();
+    }
+
+    private completeFinish() {
+        if (RunnerGameManager.isFinished) {
+            return;
+        }
+
+        RunnerGameManager.isFinishing = false;
+        RunnerGameManager.isFinished = true;
+        RunnerGameManager.isStarted = false;
+        RunnerGameManager.shouldConsumeStartInput = false;
+        RunnerGameManager.shouldJumpAfterFirstEnemyHint = false;
+        this.fadeOutNode(this.hintFinger);
+        this.fadeOutNode(this.hintTextNode);
+        this.scheduleOnce(() => this.showWinGame(), this.winGameDelay);
+    }
+
+    private showWinGame() {
+        if (!this.winGamePrefab) {
+            return;
+        }
+
+        const winGame = instantiate(this.winGamePrefab);
+        const container = this.winGameContainer ?? this.gameOverContainer ?? this.failContainer ?? this.node.parent ?? this.node.scene;
+        container.addChild(winGame);
+        winGame.setPosition(0, 0, 0);
+
+        let winScreen = winGame.getComponent(RunnerGameOverScreen);
+        if (!winScreen) {
+            winScreen = winGame.addComponent(RunnerGameOverScreen);
+        }
+
+        winScreen.titleText = this.winTitleText;
+        winScreen.buttonText = this.winButtonText;
+        winScreen.setup(this.score);
+    }
+
+    private showGameOver() {
+        if (!this.gameOverPrefab) {
+            return;
+        }
+
+        const gameOver = instantiate(this.gameOverPrefab);
+        const container = this.gameOverContainer ?? this.failContainer ?? this.node.parent ?? this.node.scene;
+        container.addChild(gameOver);
+        gameOver.setPosition(0, 0, 0);
+
+        let gameOverScreen = gameOver.getComponent(RunnerGameOverScreen);
+        if (!gameOverScreen) {
+            gameOverScreen = gameOver.addComponent(RunnerGameOverScreen);
+        }
+        gameOverScreen.setup(this.score);
+    }
+
+    private collectNode(node: Node, value: number) {
+        if (!node.isValid || this.collectedNodes.has(node)) {
+            return false;
+        }
+
+        this.collectedNodes.add(node);
+        node.getComponents(Collider2D).forEach((collider) => {
+            collider.enabled = false;
+        });
+
+        const target = this.resolveCollectTarget();
+        const startScale = node.scale.clone();
+        const popScale = startScale.clone().multiplyScalar(this.collectPopScale);
+        const endScale = startScale.clone().multiplyScalar(this.collectEndScale);
+
+        tween(node).stop();
+
+        if (!target) {
+            tween(node)
+                .to(0.15, { scale: endScale })
+                .call(() => {
+                    this.addScore(value);
+                    node.destroy();
+                })
+                .start();
+            return true;
+        }
+
+        const targetPosition = target.worldPosition.clone();
+        tween(node)
+            .to(0.08, { scale: popScale }, { easing: 'backOut' })
+            .to(
+                this.collectFlyDuration,
+                {
+                    worldPosition: new Vec3(targetPosition.x, targetPosition.y, node.worldPosition.z),
+                    scale: endScale,
+                },
+                { easing: 'cubicIn' },
+            )
+            .call(() => {
+                this.addScore(value);
+                node.destroy();
+            })
+            .start();
+
+        return true;
+    }
+
+    private addScore(value: number) {
+        this.score += value;
+        this.updateScoreLabel();
+    }
+
+    private updateScoreLabel() {
+        if (this.scoreLabel) {
+            this.scoreLabel.string = `${this.scorePrefix}${this.score}`;
+        }
+    }
+
+    private resolveScoreLabel() {
+        if (this.scoreLabel?.isValid) {
+            return this.scoreLabel;
+        }
+
+        this.scoreLabel = this.findScoreLabel(this.node.scene);
+        return this.scoreLabel;
+    }
+
+    private findScoreLabel(node: Node | null, insideScoreContainer = false): Label | null {
+        if (!node) {
+            return null;
+        }
+
+        const isScoreContainer = insideScoreContainer || /counter|cunter|score|money|cash|paypal/i.test(node.name);
+        const label = node.getComponent(Label);
+        if (label && (isScoreContainer || label.string.includes(this.scorePrefix))) {
+            return label;
+        }
+
+        for (const child of node.children) {
+            const found = this.findScoreLabel(child, isScoreContainer);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private resolveCollectTarget() {
+        if (this.collectTarget?.isValid) {
+            return this.collectTarget;
+        }
+
+        const root = this.node.scene;
+        this.collectTarget = this.findNamedCollectTarget(root) ?? this.findTopRightCollectTarget(root);
+        return this.collectTarget;
+    }
+
+    private findNamedCollectTarget(node: Node | null): Node | null {
+        if (!node) {
+            return null;
+        }
+
+        if (/(paypal|pay\s*pal|score|wallet|counter|cunter|collecttarget)/i.test(node.name) && node.getComponent(Sprite)) {
+            return node;
+        }
+
+        for (const child of node.children) {
+            const target = this.findNamedCollectTarget(child);
+            if (target) {
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    private findTopRightCollectTarget(node: Node | null, best: Node | null = null): Node | null {
+        if (!node) {
+            return best;
+        }
+
+        const transform = node.getComponent(UITransform);
+        const isUiSizedSprite =
+            node.getComponent(Sprite) &&
+            transform &&
+            transform.width <= 420 &&
+            transform.height <= 220 &&
+            node.worldPosition.x > 0 &&
+            node.worldPosition.y > 0 &&
+            !/^heart/i.test(node.name);
+
+        if (isUiSizedSprite) {
+            const bestScore = best ? best.worldPosition.x + best.worldPosition.y : -Infinity;
+            const nodeScore = node.worldPosition.x + node.worldPosition.y;
+            if (nodeScore > bestScore) {
+                best = node;
+            }
+        }
+
+        for (const child of node.children) {
+            best = this.findTopRightCollectTarget(child, best);
+        }
+
+        return best;
+    }
+
+    private resolveHearts() {
+        if (this.hearts.length > 0) {
+            this.hearts = this.hearts.filter((heart) => heart);
+            return;
+        }
+
+        const root = this.heartsRoot ?? this.node.scene;
+        const found: Node[] = [];
+        this.collectHeartNodes(root, found);
+
+        this.hearts = found.sort((left, right) => left.worldPosition.x - right.worldPosition.x);
+    }
+
+    private collectHeartNodes(node: Node | null, output: Node[]) {
+        if (!node) {
+            return;
+        }
+
+        if (/^heart/i.test(node.name) && node.getComponent(Sprite)) {
+            output.push(node);
+        }
+
+        node.children.forEach((child) => this.collectHeartNodes(child, output));
+    }
+
+    private updateHearts(animate = false) {
         this.hearts.forEach((heart, index) => {
-            heart.active = index < this.health;
+            heart.active = true;
+
+            let opacity = heart.getComponent(UIOpacity);
+            if (!opacity) {
+                opacity = heart.addComponent(UIOpacity);
+            }
+
+            const targetOpacity = index < this.health ? 255 : this.damagedHeartOpacity;
+            tween(opacity).stop();
+
+            if (animate) {
+                tween(opacity)
+                    .to(this.heartFadeDuration, { opacity: targetOpacity })
+                    .start();
+                return;
+            }
+
+            opacity.opacity = targetOpacity;
         });
     }
 
     private hideStartHint() {
         this.fadeOutNode(this.hintFinger);
         this.fadeOutNode(this.hintTextNode);
+    }
+
+    private showFirstEnemyHint() {
+        this.isFirstEnemyPaused = true;
+        RunnerGameManager.isStarted = false;
+
+        if (this.hintTextNode) {
+            const label = this.hintTextNode.getComponent(Label);
+            if (label) {
+                label.string = this.firstEnemyHintText;
+            }
+        }
+
+        this.fadeInNode(this.hintTextNode);
+        this.fadeInNode(this.hintFinger);
+        this.playFingerPulse();
+    }
+
+    private resumeFromFirstEnemyHint() {
+        this.isFirstEnemyPaused = false;
+        RunnerGameManager.isStarted = true;
+        RunnerGameManager.shouldConsumeStartInput = false;
+        RunnerGameManager.shouldJumpAfterFirstEnemyHint = true;
+        this.hideStartHint();
+    }
+
+    private fadeInNode(target: Node | null) {
+        if (!target) {
+            return;
+        }
+
+        tween(target).stop();
+        target.active = true;
+
+        let opacity = target.getComponent(UIOpacity);
+        if (!opacity) {
+            opacity = target.addComponent(UIOpacity);
+        }
+
+        opacity.opacity = 255;
     }
 
     private fadeOutNode(target: Node | null) {

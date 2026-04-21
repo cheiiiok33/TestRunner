@@ -9,6 +9,9 @@ export class RunnerEnemySpawner extends Component {
     @property([Prefab])
     enemyPrefabs: Prefab[] = [];
 
+    @property([Prefab])
+    letPrefabs: Prefab[] = [];
+
     @property(Node)
     spawnContainer: Node | null = null;
 
@@ -20,6 +23,9 @@ export class RunnerEnemySpawner extends Component {
 
     @property
     spawnY = -10;
+
+    @property
+    letSpawnY = -80;
 
     @property
     leftBound = -900;
@@ -34,10 +40,19 @@ export class RunnerEnemySpawner extends Component {
     spawnChance = 0.75;
 
     @property
+    enemySpawnWeight = 1;
+
+    @property
+    letSpawnWeight = 1;
+
+    @property
     scrollSpeed = 320;
 
     @property
     enemyExtraMoveSpeed = 80;
+
+    @property
+    letExtraMoveSpeed = 0;
 
     @property
     maxSpawnCount = 4;
@@ -46,17 +61,42 @@ export class RunnerEnemySpawner extends Component {
     enemyTag = 2;
 
     @property
+    letTag = 3;
+
+    @property
     spawnImmediately = false;
 
+    @property
+    firstSpawnDelay = 2;
+
     private distanceToNextSpawn = 0;
+    private firstSpawnTimer = 0;
     private spawnedCount = 0;
 
     onLoad() {
+        this.firstSpawnTimer = this.spawnImmediately ? 0 : this.firstSpawnDelay;
         this.resetSpawnDistance(this.spawnImmediately ? 0 : undefined);
     }
 
     update(deltaTime: number) {
-        if (!RunnerGameManager.isStarted || this.enemyPrefabs.length === 0 || this.spawnedCount >= this.maxSpawnCount) {
+        if (
+            !RunnerGameManager.isStarted ||
+            RunnerGameManager.isFinishSpawned ||
+            !this.hasSpawnPrefabs() ||
+            this.spawnedCount >= this.maxSpawnCount
+        ) {
+            return;
+        }
+
+        if (this.spawnedCount === 0) {
+            this.firstSpawnTimer -= deltaTime;
+            if (this.firstSpawnTimer > 0) {
+                return;
+            }
+
+            this.spawnObstacle(true);
+            this.spawnedCount += 1;
+            this.resetSpawnDistance();
             return;
         }
 
@@ -66,28 +106,32 @@ export class RunnerEnemySpawner extends Component {
         }
 
         if (Math.random() <= this.spawnChance) {
-            this.spawnEnemy();
+            this.spawnObstacle();
             this.spawnedCount += 1;
         }
 
         this.resetSpawnDistance();
     }
 
-    private spawnEnemy() {
-        const prefab = this.enemyPrefabs[Math.floor(Math.random() * this.enemyPrefabs.length)];
-        const enemy = instantiate(prefab);
+    private spawnObstacle(forceEnemy = false) {
+        const spawnConfig = this.pickSpawnConfig(forceEnemy);
+        if (!spawnConfig) {
+            return;
+        }
+
+        const obstacle = instantiate(spawnConfig.prefab);
         const container = this.spawnContainer ?? this.node.parent ?? this.node;
 
-        container.addChild(enemy);
-        enemy.setPosition(this.spawnX, this.spawnY, 0);
+        container.addChild(obstacle);
+        obstacle.setPosition(this.spawnX, spawnConfig.spawnY, 0);
 
-        let scroller = enemy.getComponent(RunnerObstacleScroller);
+        let scroller = obstacle.getComponent(RunnerObstacleScroller);
         if (!scroller) {
-            scroller = enemy.addComponent(RunnerObstacleScroller);
+            scroller = obstacle.addComponent(RunnerObstacleScroller);
         }
 
         scroller.scrollSpeed = this.scrollSpeed;
-        scroller.extraMoveSpeed = this.enemyExtraMoveSpeed;
+        scroller.extraMoveSpeed = spawnConfig.extraMoveSpeed;
         scroller.leftBound = this.leftBound;
         scroller.destroyAtLeftBound = true;
         scroller.randomOffsetXMin = 0;
@@ -95,11 +139,57 @@ export class RunnerEnemySpawner extends Component {
         scroller.keepStartY = true;
         scroller.followTarget = this.scrollTarget;
         scroller.configureCollider = true;
-        scroller.colliderTag = this.enemyTag;
+        scroller.colliderTag = spawnConfig.tag;
         scroller.colliderSensor = true;
+        scroller.triggerFirstEnemyHint = spawnConfig.triggerFirstEnemyHint;
     }
 
     private resetSpawnDistance(distance = randomRange(this.minSpawnDistance, this.maxSpawnDistance)) {
         this.distanceToNextSpawn = distance;
+    }
+
+    private hasSpawnPrefabs() {
+        return this.enemyPrefabs.length > 0 || this.letPrefabs.length > 0;
+    }
+
+    private pickSpawnConfig(forceEnemy: boolean) {
+        const shouldSpawnEnemy = this.shouldSpawnEnemy(forceEnemy);
+        const prefabs = shouldSpawnEnemy ? this.enemyPrefabs : this.letPrefabs;
+
+        if (prefabs.length === 0) {
+            return null;
+        }
+
+        return {
+            prefab: prefabs[Math.floor(Math.random() * prefabs.length)],
+            spawnY: shouldSpawnEnemy ? this.spawnY : this.letSpawnY,
+            extraMoveSpeed: shouldSpawnEnemy ? this.enemyExtraMoveSpeed : this.letExtraMoveSpeed,
+            tag: shouldSpawnEnemy ? this.enemyTag : this.letTag,
+            triggerFirstEnemyHint: shouldSpawnEnemy || this.enemyPrefabs.length === 0,
+        };
+    }
+
+    private shouldSpawnEnemy(forceEnemy: boolean) {
+        if (forceEnemy && this.enemyPrefabs.length > 0) {
+            return true;
+        }
+
+        if (this.enemyPrefabs.length === 0) {
+            return false;
+        }
+
+        if (this.letPrefabs.length === 0) {
+            return true;
+        }
+
+        const enemyWeight = Math.max(0, this.enemySpawnWeight);
+        const letWeight = Math.max(0, this.letSpawnWeight);
+        const totalWeight = enemyWeight + letWeight;
+
+        if (totalWeight <= 0) {
+            return true;
+        }
+
+        return Math.random() * totalWeight < enemyWeight;
     }
 }

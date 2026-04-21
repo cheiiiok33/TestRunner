@@ -12,13 +12,13 @@ import {
     Input,
     IPhysics2DContact,
     KeyCode,
-    math,
     RigidBody2D,
     Sprite,
     SpriteFrame,
     Vec2,
 } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
+import { RunnerCollectable } from './RunnerCollectable';
 
 const { ccclass, property } = _decorator;
 
@@ -54,12 +54,27 @@ export class RunnerPlayerController extends Component {
     @property
     enemyTag = 2;
 
+    @property
+    obstacleTag = 3;
+
+    @property
+    collectableTag = 4;
+
+    @property
+    finishTag = 5;
+
+    @property
+    finishStopDelay = 0.5;
+
     private body: RigidBody2D | null = null;
     private collider: Collider2D | null = null;
     private sprite: Sprite | null = null;
     private groundContacts = 0;
     private wasGrounded = false;
     private isJumping = false;
+    private stoppedByFinish = false;
+    private finishStopY = 0;
+    private jumpUnlocked = false;
     private hasStartedRun = false;
     private currentClipName = '';
     private readonly preventContextMenu = (event: Event) => {
@@ -128,6 +143,12 @@ export class RunnerPlayerController extends Component {
             return;
         }
 
+        if (RunnerGameManager.isFinished) {
+            this.stopAtFinish();
+            this.holdFinishPosition();
+            return;
+        }
+
         if (!RunnerGameManager.isStarted) {
             this.playIdleAnimation();
         }
@@ -135,6 +156,19 @@ export class RunnerPlayerController extends Component {
         if (RunnerGameManager.isStarted && !this.hasStartedRun && this.isGrounded()) {
             this.hasStartedRun = true;
             this.playGroundAnimation();
+        }
+
+        if (
+            RunnerGameManager.isStarted &&
+            this.isGrounded() &&
+            !this.isJumping &&
+            this.currentClipName === this.idleClipName
+        ) {
+            this.playGroundAnimation();
+        }
+
+        if (RunnerGameManager.isStarted) {
+            this.consumeFirstEnemyHintJump();
         }
 
         const grounded = this.isGrounded();
@@ -152,13 +186,13 @@ export class RunnerPlayerController extends Component {
         this.body.linearVelocity = new Vec2(0, limitedFallSpeed);
 
         const position = this.node.position;
-        if (!math.equals(position.x, this.fixedX, 0.01)) {
+        if (Math.abs(position.x - this.fixedX) > 0.01) {
             this.node.setPosition(this.fixedX, position.y, position.z);
         }
     }
 
     private tryJump() {
-        if (!this.body || !this.isGrounded()) {
+        if (!this.jumpUnlocked || !this.body || !this.isGrounded()) {
             return;
         }
 
@@ -178,7 +212,23 @@ export class RunnerPlayerController extends Component {
             return;
         }
 
-        if (other.tag === this.enemyTag) {
+        if (other.tag === this.collectableTag) {
+            const collectable = other.node.getComponent(RunnerCollectable);
+            if (collectable) {
+                collectable.collect();
+                return;
+            }
+
+            RunnerGameManager.collectNode(other.node);
+            return;
+        }
+
+        if (other.tag === this.finishTag) {
+            RunnerGameManager.finishGame(this.finishStopDelay);
+            return;
+        }
+
+        if (this.isDamageCollider(other)) {
             RunnerGameManager.damagePlayer();
         }
     }
@@ -189,6 +239,38 @@ export class RunnerPlayerController extends Component {
         }
 
         this.groundContacts = Math.max(0, this.groundContacts - 1);
+    }
+
+    private isDamageCollider(other: Collider2D) {
+        return other.tag === this.enemyTag || other.tag === this.obstacleTag;
+    }
+
+    private stopAtFinish() {
+        if (!this.body || this.stoppedByFinish) {
+            return;
+        }
+
+        this.stoppedByFinish = true;
+        this.isJumping = false;
+        this.finishStopY = this.node.position.y;
+        this.body.linearVelocity = new Vec2(0, 0);
+        this.body.angularVelocity = 0;
+        this.body.gravityScale = 0;
+        this.playIdleAnimation();
+    }
+
+    private holdFinishPosition() {
+        if (!this.body || !this.stoppedByFinish) {
+            return;
+        }
+
+        this.body.linearVelocity = new Vec2(0, 0);
+        this.body.angularVelocity = 0;
+
+        const position = this.node.position;
+        if (Math.abs(position.x - this.fixedX) > 0.01 || Math.abs(position.y - this.finishStopY) > 0.01) {
+            this.node.setPosition(this.fixedX, this.finishStopY, position.z);
+        }
     }
 
     private playJumpAnimation() {
@@ -259,6 +341,10 @@ export class RunnerPlayerController extends Component {
             return;
         }
 
+        if (this.consumeFirstEnemyHintJump()) {
+            return;
+        }
+
         this.tryJump();
     }
 
@@ -268,6 +354,10 @@ export class RunnerPlayerController extends Component {
         }
 
         if (this.consumeStartTap()) {
+            return;
+        }
+
+        if (this.consumeFirstEnemyHintJump()) {
             return;
         }
 
@@ -286,11 +376,25 @@ export class RunnerPlayerController extends Component {
                 return;
             }
 
+            if (this.consumeFirstEnemyHintJump()) {
+                return;
+            }
+
             this.tryJump();
         }
     }
 
     private consumeStartTap() {
         return RunnerGameManager.consumeStartInput();
+    }
+
+    private consumeFirstEnemyHintJump() {
+        if (!RunnerGameManager.consumeFirstEnemyHintJump()) {
+            return false;
+        }
+
+        this.jumpUnlocked = true;
+        this.tryJump();
+        return true;
     }
 }
