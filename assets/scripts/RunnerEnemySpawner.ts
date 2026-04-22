@@ -1,6 +1,7 @@
-import { _decorator, Component, instantiate, Node, Prefab, randomRange } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, randomRange, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerObstacleScroller } from './RunnerObstacleScroller';
+import { RunnerPlayerController } from './RunnerPlayerController';
 
 const { ccclass, property } = _decorator;
 
@@ -29,6 +30,24 @@ export class RunnerEnemySpawner extends Component {
 
     @property
     leftBound = -900;
+
+    @property
+    fitSpawnToVisibleBounds = true;
+
+    @property
+    spawnRightPadding = 360;
+
+    @property
+    leftBoundPadding = 260;
+
+    @property(Node)
+    firstEnemyHintTarget: Node | null = null;
+
+    @property
+    firstEnemyHintLeadDistance = 300;
+
+    @property
+    firstEnemyHintRightPadding = 48;
 
     @property
     minSpawnDistance = 900;
@@ -72,10 +91,12 @@ export class RunnerEnemySpawner extends Component {
     private distanceToNextSpawn = 0;
     private firstSpawnTimer = 0;
     private spawnedCount = 0;
+    private cachedFirstEnemyHintTarget: Node | null = null;
 
     onLoad() {
         this.firstSpawnTimer = this.spawnImmediately ? 0 : this.firstSpawnDelay;
         this.resetSpawnDistance(this.spawnImmediately ? 0 : undefined);
+        this.syncSpawnBoundsToVisibleArea();
     }
 
     update(deltaTime: number) {
@@ -87,6 +108,8 @@ export class RunnerEnemySpawner extends Component {
         ) {
             return;
         }
+
+        this.syncSpawnBoundsToVisibleArea();
 
         if (this.spawnedCount === 0) {
             this.firstSpawnTimer -= deltaTime;
@@ -142,6 +165,67 @@ export class RunnerEnemySpawner extends Component {
         scroller.colliderTag = spawnConfig.tag;
         scroller.colliderSensor = true;
         scroller.triggerFirstEnemyHint = spawnConfig.triggerFirstEnemyHint;
+        scroller.firstEnemyHintX = this.resolveFirstEnemyHintX();
+    }
+
+    private syncSpawnBoundsToVisibleArea() {
+        if (!this.fitSpawnToVisibleBounds) {
+            return;
+        }
+
+        const visible = view.getVisibleSize();
+        const halfWidth = visible.width * 0.5;
+
+        this.spawnX = halfWidth + this.spawnRightPadding;
+        this.leftBound = -halfWidth - this.leftBoundPadding;
+    }
+
+    private resolveFirstEnemyHintX() {
+        const visible = view.getVisibleSize();
+        const right = visible.width * 0.5;
+        const target = this.resolveFirstEnemyHintTarget();
+        const targetX = this.resolveTargetX(target);
+        const desiredHintX = targetX + this.firstEnemyHintLeadDistance;
+        const maxHintX = right - this.firstEnemyHintRightPadding;
+
+        return Math.min(desiredHintX, maxHintX);
+    }
+
+    private resolveTargetX(target: Node | null) {
+        if (!target) {
+            return -390;
+        }
+
+        const playerController = target.getComponent(RunnerPlayerController);
+        return playerController?.fixedX ?? target.position.x;
+    }
+
+    private resolveFirstEnemyHintTarget() {
+        if (this.firstEnemyHintTarget?.isValid) {
+            return this.firstEnemyHintTarget;
+        }
+
+        if (this.cachedFirstEnemyHintTarget?.isValid) {
+            return this.cachedFirstEnemyHintTarget;
+        }
+
+        this.cachedFirstEnemyHintTarget = this.findPlayerNode(this.node.scene ?? this.node);
+        return this.cachedFirstEnemyHintTarget;
+    }
+
+    private findPlayerNode(root: Node): Node | null {
+        if (root.getComponent(RunnerPlayerController)) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const player = this.findPlayerNode(child);
+            if (player) {
+                return player;
+            }
+        }
+
+        return null;
     }
 
     private resetSpawnDistance(distance = randomRange(this.minSpawnDistance, this.maxSpawnDistance)) {

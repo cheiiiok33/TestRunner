@@ -1,4 +1,4 @@
-import { _decorator, Camera, Component, game, Node, ResolutionPolicy, screen, UITransform, Vec3, view } from 'cc';
+import { _decorator, Camera, Color, Component, game, Node, ResolutionPolicy, screen, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
 
@@ -21,17 +21,26 @@ export class PlayableResponsiveLayout extends Component {
     @property(Node)
     hand: Node | null = null;
 
-    @property(Node)
-    cta: Node | null = null;
+    @property
+    designWidth = 1080;
 
     @property
-    designWidth = 1280;
+    designHeight = 2368;
 
     @property
-    designHeight = 720;
+    portraitHeroX = -340;
 
     @property
-    portraitHeroX = -190;
+    usePortraitHeroNormalizedX = true;
+
+    @property
+    portraitHeroNormalizedX = 0.2;
+
+    @property
+    portraitHeroMinLeftPadding = 90;
+
+    @property
+    portraitHeroMaxRightPadding = 220;
 
     @property
     portraitHeroY = -85;
@@ -49,14 +58,42 @@ export class PlayableResponsiveLayout extends Component {
     landscapeHeroScale = 1;
 
     @property
-    ctaHeight = 120;
+    keepLandscapeViewInPortrait = false;
 
     @property
-    edgePadding = 24;
+    portraitWorldScale = 1;
+
+    @property
+    landscapeWorldScale = 1;
+
+    @property
+    portraitWorldY = 0;
+
+    @property
+    landscapeWorldY = 0;
+
+    @property
+    portraitGameplayHeight = 760;
+
+    @property
+    landscapeGameplayHeight = 720;
+
+    @property
+    backgroundTileWidth = 1707;
+
+    @property
+    backgroundTileHeight = 720;
+
+    @property
+    usePlayableClearColor = true;
+
+    @property(Color)
+    playableClearColor = new Color(248, 229, 224, 255);
 
     private lastWidth = 0;
     private lastHeight = 0;
     private lastPortrait = false;
+    private lastSafeKey = '';
     private readonly handBaseScale = new Vec3(1, 1, 1);
     private readonly onBrowserResize = () => {
         this.scheduleOnce(() => this.applyLayout(true), 0);
@@ -113,14 +150,43 @@ export class PlayableResponsiveLayout extends Component {
         return frame.height >= frame.width;
     }
 
-    private applyResolution(isPortrait = this.isPortraitFrame()) {
-        const longSide = Math.max(this.designWidth, this.designHeight);
-        const shortSide = Math.min(this.designWidth, this.designHeight);
+    private getSafeInsets(visibleWidth: number, visibleHeight: number) {
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            return { top: 0, right: 0, bottom: 0, left: 0, key: '0,0,0,0' };
+        }
 
-        if (isPortrait) {
-            view.setDesignResolutionSize(shortSide, longSide, ResolutionPolicy.FIXED_WIDTH);
+        const styles = getComputedStyle(document.documentElement);
+        const readInset = (name: string) => {
+            const value = Number.parseFloat(styles.getPropertyValue(name).trim());
+            return Number.isFinite(value) ? value : 0;
+        };
+
+        const viewportSize = this.getViewportSize();
+        const scaleX = visibleWidth / Math.max(1, viewportSize.width);
+        const scaleY = visibleHeight / Math.max(1, viewportSize.height);
+
+        const top = readInset('--safe-top') * scaleY;
+        const right = readInset('--safe-right') * scaleX;
+        const bottom = readInset('--safe-bottom') * scaleY;
+        const left = readInset('--safe-left') * scaleX;
+
+        return {
+            top,
+            right,
+            bottom,
+            left,
+            key: `${top.toFixed(1)},${right.toFixed(1)},${bottom.toFixed(1)},${left.toFixed(1)}`,
+        };
+    }
+
+    private applyResolution(isPortrait = this.isPortraitFrame()) {
+        const portraitWidth = Math.min(this.designWidth, this.designHeight);
+        const portraitHeight = Math.max(this.designWidth, this.designHeight);
+
+        if (isPortrait && !this.keepLandscapeViewInPortrait) {
+            view.setDesignResolutionSize(portraitWidth, portraitHeight, ResolutionPolicy.FIXED_HEIGHT);
         } else {
-            view.setDesignResolutionSize(longSide, shortSide, ResolutionPolicy.FIXED_HEIGHT);
+            view.setDesignResolutionSize(portraitHeight, portraitWidth, ResolutionPolicy.FIXED_HEIGHT);
         }
     }
 
@@ -152,6 +218,10 @@ export class PlayableResponsiveLayout extends Component {
             document.documentElement.style.overflow = 'hidden';
             document.documentElement.style.width = width;
             document.documentElement.style.height = height;
+            document.documentElement.style.setProperty('--safe-top', 'env(safe-area-inset-top)');
+            document.documentElement.style.setProperty('--safe-right', 'env(safe-area-inset-right)');
+            document.documentElement.style.setProperty('--safe-bottom', 'env(safe-area-inset-bottom)');
+            document.documentElement.style.setProperty('--safe-left', 'env(safe-area-inset-left)');
         }
 
         const gameDiv = document.getElementById('GameDiv');
@@ -184,12 +254,14 @@ export class PlayableResponsiveLayout extends Component {
         const isPortrait = this.isPortraitFrame();
         this.applyResolution(isPortrait);
         const visible = view.getVisibleSize();
+        const safeInsets = this.getSafeInsets(visible.width, visible.height);
 
         if (
             !force &&
             Math.abs(visible.width - this.lastWidth) < 0.5 &&
             Math.abs(visible.height - this.lastHeight) < 0.5 &&
-            isPortrait === this.lastPortrait
+            isPortrait === this.lastPortrait &&
+            safeInsets.key === this.lastSafeKey
         ) {
             return;
         }
@@ -197,41 +269,34 @@ export class PlayableResponsiveLayout extends Component {
         this.lastWidth = visible.width;
         this.lastHeight = visible.height;
         this.lastPortrait = isPortrait;
+        this.lastSafeKey = safeInsets.key;
 
-        const resizedVisible = view.getVisibleSize();
-        const halfWidth = resizedVisible.width * 0.5;
-        const halfHeight = resizedVisible.height * 0.5;
-        const left = -halfWidth;
-        const right = halfWidth;
-        const top = halfHeight;
-        const bottom = -halfHeight;
+        const halfWidth = visible.width * 0.5;
+        const left = -halfWidth + safeInsets.left;
+        const right = halfWidth - safeInsets.right;
 
         if (this.camera) {
-            this.camera.orthoHeight = resizedVisible.height * 0.5;
+            this.camera.orthoHeight = visible.height * 0.5;
+            if (this.usePlayableClearColor) {
+                this.camera.clearColor = this.playableClearColor;
+            }
             this.camera.node.setPosition(0, 0, this.camera.node.position.z);
         }
 
-        if (this.cta) {
-            const transform = this.cta.getComponent(UITransform);
-            if (transform) {
-                transform.setContentSize(resizedVisible.width, this.ctaHeight);
-            }
-            this.cta.setPosition(0, bottom + this.ctaHeight * 0.5, this.cta.position.z);
-            this.layoutCtaChildren(left, right, isPortrait);
-        }
-
-        this.layoutHud(left, right, top, isPortrait);
-        this.layoutBackgrounds(resizedVisible.width, resizedVisible.height);
+        this.layoutBackgrounds(visible.width, visible.height, isPortrait);
 
         if (this.hero) {
-            const x = isPortrait ? this.portraitHeroX : this.landscapeHeroX;
+            const x = isPortrait ? this.resolvePortraitHeroX(left, right) : this.landscapeHeroX;
             const y = isPortrait ? this.portraitHeroY : this.landscapeHeroY;
             const scale = isPortrait ? this.portraitHeroScale : this.landscapeHeroScale;
             const playerController = this.hero.getComponent(RunnerPlayerController);
+            const safeX = isPortrait
+                ? this.clamp(x, left + this.portraitHeroMinLeftPadding, right - this.portraitHeroMaxRightPadding)
+                : x;
             if (playerController) {
-                playerController.fixedX = x;
+                playerController.fixedX = safeX;
             }
-            this.hero.setPosition(x, RunnerGameManager.isStarted ? this.hero.position.y : y, this.hero.position.z);
+            this.hero.setPosition(safeX, RunnerGameManager.isStarted ? this.hero.position.y : y, this.hero.position.z);
             this.hero.setScale(scale, scale, this.hero.scale.z);
         }
 
@@ -252,11 +317,14 @@ export class PlayableResponsiveLayout extends Component {
         }
 
         if (this.gameWorld) {
-            this.gameWorld.setScale(1, 1, this.gameWorld.scale.z);
+            const worldScale = isPortrait ? this.portraitWorldScale : this.landscapeWorldScale;
+            const worldY = isPortrait ? this.portraitWorldY : this.landscapeWorldY;
+            this.gameWorld.setScale(worldScale, worldScale, this.gameWorld.scale.z);
+            this.gameWorld.setPosition(this.gameWorld.position.x, worldY, this.gameWorld.position.z);
         }
     }
 
-    private layoutBackgrounds(visibleWidth: number, visibleHeight: number) {
+    private layoutBackgrounds(visibleWidth: number, visibleHeight: number, isPortrait: boolean) {
         if (!this.gameWorld) {
             return;
         }
@@ -270,70 +338,52 @@ export class PlayableResponsiveLayout extends Component {
             return;
         }
 
-        const baseWidth = backgrounds[0].getComponent(UITransform)?.width ?? this.designWidth;
-        const fillWidth = Math.max(baseWidth, visibleWidth);
+        const tileWidth = this.backgroundTileWidth > 0
+            ? this.backgroundTileWidth
+            : backgrounds[0].getComponent(UITransform)?.width ?? this.designWidth;
+        const tileHeight = this.backgroundTileHeight > 0 ? this.backgroundTileHeight : undefined;
 
         backgrounds.forEach((background, index) => {
             const transform = background.getComponent(UITransform);
-            if (transform) {
-                transform.setContentSize(fillWidth, visibleHeight);
+            if (transform && tileHeight) {
+                transform.setContentSize(tileWidth, tileHeight);
             }
 
-            background.setPosition(index * fillWidth, 0, background.position.z);
+            background.setPosition(index * tileWidth, 0, background.position.z);
 
             for (const component of background.getComponents(Component)) {
-                const scrollingComponent = component as Component & { loopWidth?: number };
+                const scrollingComponent = component as Component & {
+                    loopWidth?: number;
+                    leftBound?: number;
+                    resetX?: number;
+                };
                 if (typeof scrollingComponent.loopWidth === 'number') {
-                    scrollingComponent.loopWidth = fillWidth;
+                    scrollingComponent.loopWidth = tileWidth;
+                }
+                if (typeof scrollingComponent.leftBound === 'number') {
+                    scrollingComponent.leftBound = -tileWidth;
+                }
+                if (typeof scrollingComponent.resetX === 'number') {
+                    scrollingComponent.resetX = tileWidth;
                 }
             }
         });
     }
 
-    private layoutHud(left: number, right: number, top: number, isPortrait: boolean) {
-        const hud = this.node.getChildByName('HUD') ?? this.node;
-        if (!hud) {
-            return;
+    private clamp(value: number, min: number, max: number) {
+        if (min > max) {
+            return (min + max) * 0.5;
         }
 
-        const padding = isPortrait ? this.edgePadding : this.edgePadding * 0.75;
-        const topY = top - (isPortrait ? 58 : 36);
-        const scale = 1;
-
-        const hearts = hud.getChildByName('heart');
-        if (hearts) {
-            hearts.setPosition(left + padding + 30 * scale, topY, hearts.position.z);
-            hearts.setScale(scale, scale, hearts.scale.z);
-        }
-
-        const counter = hud.getChildByName('Сounter') ?? hud.getChildByName('Counter');
-        if (counter) {
-            const width = counter.getComponent(UITransform)?.width ?? 200;
-            counter.setPosition(right - padding - width * scale * 0.5, topY - 6 * scale, counter.position.z);
-            counter.setScale(scale, scale, counter.scale.z);
-        }
+        return Math.min(max, Math.max(min, value));
     }
 
-    private layoutCtaChildren(left: number, right: number, isPortrait: boolean) {
-        if (!this.cta) {
-            return;
+    private resolvePortraitHeroX(left: number, right: number) {
+        if (!this.usePortraitHeroNormalizedX) {
+            return this.portraitHeroX;
         }
 
-        const padding = isPortrait ? this.edgePadding : this.edgePadding * 0.75;
-        const scale = 1;
-        const playOff = this.cta.getChildByName('PlayOff');
-        const download = this.cta.getChildByName('Download');
-
-        if (playOff) {
-            const width = playOff.getComponent(UITransform)?.width ?? 300;
-            playOff.setPosition(left + padding + width * scale * 0.5, 0, playOff.position.z);
-            playOff.setScale(scale, scale, playOff.scale.z);
-        }
-
-        if (download) {
-            const width = download.getComponent(UITransform)?.width ?? 200;
-            download.setPosition(right - padding - width * scale * 0.5, 0, download.position.z);
-            download.setScale(scale, scale, download.scale.z);
-        }
+        const normalizedX = this.clamp(this.portraitHeroNormalizedX, 0, 1);
+        return left + (right - left) * normalizedX;
     }
 }
