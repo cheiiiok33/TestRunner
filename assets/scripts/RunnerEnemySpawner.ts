@@ -120,7 +120,7 @@ export class RunnerEnemySpawner extends Component {
         }
 
         const obstacle = instantiate(spawnConfig.prefab);
-        const container = this.spawnContainer ?? this.node.parent ?? this.node;
+        const container = this.resolveSpawnContainer();
 
         container.addChild(obstacle);
         obstacle.setPosition(this.spawnX, spawnConfig.spawnY, 0);
@@ -191,5 +191,32 @@ export class RunnerEnemySpawner extends Component {
         }
 
         return Math.random() * totalWeight < enemyWeight;
+    }
+
+    private resolveSpawnContainer() {
+        if (this.spawnContainer && this.node.parent && this.spawnContainer !== this.node.scene) {
+            const sameBranch =
+                this.spawnContainer === this.node.parent || this.isDescendantOf(this.spawnContainer, this.node.parent);
+
+            if (sameBranch) {
+                return this.spawnContainer;
+            }
+        }
+
+        return this.node.parent ?? this.node;
+    }
+
+    private isDescendantOf(node: Node, parent: Node) {
+        let current: Node | null = node;
+
+        while (current) {
+            if (current === parent) {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 }

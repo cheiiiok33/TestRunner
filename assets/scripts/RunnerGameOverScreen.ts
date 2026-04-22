@@ -150,9 +150,31 @@ export class RunnerGameOverScreen extends Component {
 
     private findScoreLabel(labels: Label[]) {
         const candidates = labels.filter((label) => label !== this.titleLabel);
+        const namedScoreLabel = candidates.find((label) => this.hasScoreContainerParent(label.node));
+        if (namedScoreLabel) {
+            return namedScoreLabel;
+        }
+
+        const valueLabel = candidates.find((label) => label.string.includes(this.scorePrefix));
+        if (valueLabel) {
+            return valueLabel;
+        }
+
         return candidates
             .slice()
             .sort((left, right) => Math.abs(left.node.worldPosition.y) - Math.abs(right.node.worldPosition.y))[0] ?? null;
+    }
+
+    private hasScoreContainerParent(node: Node) {
+        let current: Node | null = node;
+        while (current) {
+            if (/paypal|pay\s*pal|score|money|cash|wallet/i.test(current.name)) {
+                return true;
+            }
+            current = current.parent;
+        }
+
+        return false;
     }
 
     private isDescendantOf(node: Node, parent: Node) {

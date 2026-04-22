@@ -68,7 +68,7 @@ export class RunnerMoneySpawner extends Component {
     private spawnMoneyPattern() {
         const prefab = this.moneyPrefabs[this.spawnIndex % this.moneyPrefabs.length];
         const pattern = instantiate(prefab);
-        const container = this.spawnContainer ?? this.node.parent ?? this.node;
+        const container = this.resolveSpawnContainer();
         const spawnY = this.getSpawnY();
 
         container.addChild(pattern);
@@ -124,5 +124,32 @@ export class RunnerMoneySpawner extends Component {
 
         const y = this.spawnYPositions[this.spawnIndex % this.spawnYPositions.length];
         return Number.isFinite(y) ? y : randomRange(-40, 150);
+    }
+
+    private resolveSpawnContainer() {
+        if (this.spawnContainer && this.node.parent && this.spawnContainer !== this.node.scene) {
+            const sameBranch =
+                this.spawnContainer === this.node.parent || this.isDescendantOf(this.spawnContainer, this.node.parent);
+
+            if (sameBranch) {
+                return this.spawnContainer;
+            }
+        }
+
+        return this.node.parent ?? this.node;
+    }
+
+    private isDescendantOf(node: Node, parent: Node) {
+        let current: Node | null = node;
+
+        while (current) {
+            if (current === parent) {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 }

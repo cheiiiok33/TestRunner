@@ -12,6 +12,7 @@ import {
     Input,
     IPhysics2DContact,
     KeyCode,
+    Node,
     RigidBody2D,
     Sprite,
     SpriteFrame,
@@ -73,7 +74,6 @@ export class RunnerPlayerController extends Component {
     private wasGrounded = false;
     private isJumping = false;
     private stoppedByFinish = false;
-    private finishStopY = 0;
     private jumpUnlocked = false;
     private hasStartedRun = false;
     private currentClipName = '';
@@ -92,6 +92,10 @@ export class RunnerPlayerController extends Component {
 
         if (!this.groundSpriteFrame && this.sprite) {
             this.groundSpriteFrame = this.sprite.spriteFrame;
+        }
+
+        if (this.sprite) {
+            this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         }
 
         if (!this.body) {
@@ -143,9 +147,9 @@ export class RunnerPlayerController extends Component {
             return;
         }
 
-        if (RunnerGameManager.isFinished) {
+        if (RunnerGameManager.isFinished || RunnerGameManager.isFinishing) {
             this.stopAtFinish();
-            this.holdFinishPosition();
+            this.updateFinishPosition();
             return;
         }
 
@@ -199,6 +203,7 @@ export class RunnerPlayerController extends Component {
         this.isJumping = true;
         this.body.linearVelocity = new Vec2(0, 0);
         this.playJumpAnimation();
+        RunnerGameManager.playJumpAudio();
         this.body.linearVelocity = new Vec2(0, this.calculateJumpVelocity());
     }
 
@@ -224,7 +229,7 @@ export class RunnerPlayerController extends Component {
         }
 
         if (other.tag === this.finishTag) {
-            RunnerGameManager.finishGame(this.finishStopDelay);
+            RunnerGameManager.finishGame(this.finishStopDelay, this.resolveFinishRoot(other.node));
             return;
         }
 
@@ -252,24 +257,25 @@ export class RunnerPlayerController extends Component {
 
         this.stoppedByFinish = true;
         this.isJumping = false;
-        this.finishStopY = this.node.position.y;
         this.body.linearVelocity = new Vec2(0, 0);
         this.body.angularVelocity = 0;
         this.body.gravityScale = 0;
         this.playIdleAnimation();
     }
 
-    private holdFinishPosition() {
+    private updateFinishPosition() {
         if (!this.body || !this.stoppedByFinish) {
             return;
         }
 
-        this.body.linearVelocity = new Vec2(0, 0);
         this.body.angularVelocity = 0;
 
+        this.body.linearVelocity = new Vec2(0, 0);
+        this.body.gravityScale = 0;
+
         const position = this.node.position;
-        if (Math.abs(position.x - this.fixedX) > 0.01 || Math.abs(position.y - this.finishStopY) > 0.01) {
-            this.node.setPosition(this.fixedX, this.finishStopY, position.z);
+        if (Math.abs(position.x - this.fixedX) > 0.01) {
+            this.node.setPosition(this.fixedX, position.y, position.z);
         }
     }
 
@@ -333,6 +339,26 @@ export class RunnerPlayerController extends Component {
     }
 
     private onTouchStart() {
+        this.handleJumpInput();
+    }
+
+    private onMouseDown(event: EventMouse) {
+        if (
+            event.getButton() === EventMouse.BUTTON_LEFT ||
+            event.getButton() === EventMouse.BUTTON_RIGHT ||
+            event.getButton() === EventMouse.BUTTON_MIDDLE
+        ) {
+            this.handleJumpInput();
+        }
+    }
+
+    private onKeyDown(event: EventKeyboard) {
+        if (event.keyCode === KeyCode.SPACE && RunnerGameManager.isStarted) {
+            this.handleJumpInput();
+        }
+    }
+
+    private handleJumpInput() {
         if (!RunnerGameManager.isStarted) {
             return;
         }
@@ -346,42 +372,6 @@ export class RunnerPlayerController extends Component {
         }
 
         this.tryJump();
-    }
-
-    private onMouseDown(event: EventMouse) {
-        if (!RunnerGameManager.isStarted) {
-            return;
-        }
-
-        if (this.consumeStartTap()) {
-            return;
-        }
-
-        if (this.consumeFirstEnemyHintJump()) {
-            return;
-        }
-
-        if (
-            event.getButton() === EventMouse.BUTTON_LEFT ||
-            event.getButton() === EventMouse.BUTTON_RIGHT ||
-            event.getButton() === EventMouse.BUTTON_MIDDLE
-        ) {
-            this.tryJump();
-        }
-    }
-
-    private onKeyDown(event: EventKeyboard) {
-        if (event.keyCode === KeyCode.SPACE && RunnerGameManager.isStarted) {
-            if (this.consumeStartTap()) {
-                return;
-            }
-
-            if (this.consumeFirstEnemyHintJump()) {
-                return;
-            }
-
-            this.tryJump();
-        }
     }
 
     private consumeStartTap() {
@@ -396,5 +386,15 @@ export class RunnerPlayerController extends Component {
         this.jumpUnlocked = true;
         this.tryJump();
         return true;
+    }
+
+    private resolveFinishRoot(node: Node) {
+        let current: Node | null = node;
+
+        while (current?.parent && current.parent !== this.node.parent) {
+            current = current.parent;
+        }
+
+        return current ?? node;
     }
 }

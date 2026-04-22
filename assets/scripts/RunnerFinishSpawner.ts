@@ -63,7 +63,7 @@ export class RunnerFinishSpawner extends Component {
         }
 
         const finish = instantiate(this.finishPrefab);
-        const container = this.spawnContainer ?? this.node.parent ?? this.node.scene;
+        const container = this.resolveSpawnContainer();
         container.addChild(finish);
         this.placeBehindTarget(finish, container);
         this.raisePlayerAboveFinish(container);
@@ -139,5 +139,32 @@ export class RunnerFinishSpawner extends Component {
         }
 
         return null;
+    }
+
+    private resolveSpawnContainer() {
+        if (this.spawnContainer && this.node.parent && this.spawnContainer !== this.node.scene) {
+            const sameBranch =
+                this.spawnContainer === this.node.parent || this.isDescendantOf(this.spawnContainer, this.node.parent);
+
+            if (sameBranch) {
+                return this.spawnContainer;
+            }
+        }
+
+        return this.node.parent ?? this.node.scene ?? this.node;
+    }
+
+    private isDescendantOf(node: Node, parent: Node) {
+        let current: Node | null = node;
+
+        while (current) {
+            if (current === parent) {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 }
