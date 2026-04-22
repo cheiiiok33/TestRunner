@@ -3856,7 +3856,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 2000,
+      "width": 1080,
       "height": 80
     },
     "_anchorPoint": {
@@ -3915,7 +3915,7 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "_alignFlags": 20,
+    "_alignFlags": 44,
     "_target": {
       "__id__": 2
     },
@@ -3931,7 +3931,7 @@
     "_isAbsBottom": true,
     "_isAbsHorizontalCenter": true,
     "_isAbsVerticalCenter": true,
-    "_originalWidth": 0,
+    "_originalWidth": 2000,
     "_originalHeight": 0,
     "_alignMode": 1,
     "_lockFlags": 0,
@@ -4142,7 +4142,7 @@
   {
     "__type__": "cc.Node",
     "_name": "Label",
-    "_objFlags": 512,
+    "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
       "__id__": 108
