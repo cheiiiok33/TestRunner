@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, Prefab, randomRange, view } from 'cc';
+import { _decorator, BoxCollider2D, Component, instantiate, Node, Prefab, randomRange, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerObstacleScroller } from './RunnerObstacleScroller';
 import { RunnerPlayerController } from './RunnerPlayerController';
@@ -38,13 +38,25 @@ export class RunnerEnemySpawner extends Component {
     spawnRightPadding = 360;
 
     @property
+    spawnDistanceFromPlayer = 1200;
+
+    @property
+    alignSpawnYToPlayer = true;
+
+    @property
+    enemyYOffsetFromPlayer = 0;
+
+    @property
+    letYOffsetFromPlayer = 0;
+
+    @property
     leftBoundPadding = 260;
 
     @property(Node)
     firstEnemyHintTarget: Node | null = null;
 
     @property
-    firstEnemyHintLeadDistance = 300;
+    firstEnemyHintLeadDistance = 360;
 
     @property
     firstEnemyHintRightPadding = 48;
@@ -92,11 +104,14 @@ export class RunnerEnemySpawner extends Component {
     private firstSpawnTimer = 0;
     private spawnedCount = 0;
     private cachedFirstEnemyHintTarget: Node | null = null;
+    private cachedGroundNode: Node | null = null;
+    private cachedFloorOffsetFromGround: number | null = null;
 
     onLoad() {
         this.firstSpawnTimer = this.spawnImmediately ? 0 : this.firstSpawnDelay;
         this.resetSpawnDistance(this.spawnImmediately ? 0 : undefined);
         this.syncSpawnBoundsToVisibleArea();
+        this.captureFloorOffsetFromGround();
     }
 
     update(deltaTime: number) {
@@ -146,7 +161,7 @@ export class RunnerEnemySpawner extends Component {
         const container = this.resolveSpawnContainer();
 
         container.addChild(obstacle);
-        obstacle.setPosition(this.spawnX, spawnConfig.spawnY, 0);
+        obstacle.setPosition(this.spawnX, this.resolveSpawnY(obstacle, container, spawnConfig.isEnemy, spawnConfig.spawnY), 0);
 
         let scroller = obstacle.getComponent(RunnerObstacleScroller);
         if (!scroller) {
@@ -165,6 +180,8 @@ export class RunnerEnemySpawner extends Component {
         scroller.colliderTag = spawnConfig.tag;
         scroller.colliderSensor = true;
         scroller.triggerFirstEnemyHint = spawnConfig.triggerFirstEnemyHint;
+        scroller.firstEnemyHintTarget = this.resolveFirstEnemyHintTarget();
+        scroller.firstEnemyHintLeadDistance = this.firstEnemyHintLeadDistance;
         scroller.firstEnemyHintX = this.resolveFirstEnemyHintX();
     }
 
@@ -175,20 +192,21 @@ export class RunnerEnemySpawner extends Component {
 
         const visible = view.getVisibleSize();
         const halfWidth = visible.width * 0.5;
+        const rightEdgeX = halfWidth;
+        const playerX = this.resolveTargetX(this.resolveFirstEnemyHintTarget());
 
-        this.spawnX = halfWidth + this.spawnRightPadding;
+        this.spawnX = Math.max(
+            rightEdgeX + this.spawnRightPadding,
+            playerX + this.spawnDistanceFromPlayer,
+        );
         this.leftBound = -halfWidth - this.leftBoundPadding;
     }
 
     private resolveFirstEnemyHintX() {
-        const visible = view.getVisibleSize();
-        const right = visible.width * 0.5;
         const target = this.resolveFirstEnemyHintTarget();
         const targetX = this.resolveTargetX(target);
-        const desiredHintX = targetX + this.firstEnemyHintLeadDistance;
-        const maxHintX = right - this.firstEnemyHintRightPadding;
-
-        return Math.min(desiredHintX, maxHintX);
+        void this.firstEnemyHintRightPadding;
+        return targetX + this.firstEnemyHintLeadDistance;
     }
 
     private resolveTargetX(target: Node | null) {
@@ -246,6 +264,7 @@ export class RunnerEnemySpawner extends Component {
 
         return {
             prefab: prefabs[Math.floor(Math.random() * prefabs.length)],
+            isEnemy: shouldSpawnEnemy,
             spawnY: shouldSpawnEnemy ? this.spawnY : this.letSpawnY,
             extraMoveSpeed: shouldSpawnEnemy ? this.enemyExtraMoveSpeed : this.letExtraMoveSpeed,
             tag: shouldSpawnEnemy ? this.enemyTag : this.letTag,
@@ -288,6 +307,96 @@ export class RunnerEnemySpawner extends Component {
         }
 
         return this.node.parent ?? this.node;
+    }
+
+    private resolveSpawnY(node: Node, container: Node, isEnemy: boolean, fallbackY: number) {
+        if (!this.alignSpawnYToPlayer) {
+            return fallbackY;
+        }
+
+        const floorY = this.resolveGameplayFloorY(container);
+        if (floorY === null) {
+            return fallbackY;
+        }
+
+        const yOffset = isEnemy ? this.enemyYOffsetFromPlayer : this.letYOffsetFromPlayer;
+        return floorY + this.resolveFootOffset(node) + yOffset;
+    }
+
+    private resolveGameplayFloorY(container: Node) {
+        const ground = this.resolveGroundNode();
+        if (!ground) {
+            const target = this.resolveFirstEnemyHintTarget();
+            return target ? this.resolveNodeYInContainer(target, container) : null;
+        }
+
+        const currentGroundY = this.resolveNodeYInContainer(ground, container);
+        if (currentGroundY === null) {
+            return null;
+        }
+
+        if (this.cachedFloorOffsetFromGround === null) {
+            const target = this.resolveFirstEnemyHintTarget();
+            const targetY = target ? this.resolveNodeYInContainer(target, container) : null;
+            if (targetY === null) {
+                return null;
+            }
+
+            this.cachedFloorOffsetFromGround = targetY - currentGroundY;
+        }
+
+        return currentGroundY + this.cachedFloorOffsetFromGround;
+    }
+
+    private captureFloorOffsetFromGround() {
+        const container = this.resolveSpawnContainer();
+        const ground = this.resolveGroundNode();
+        const target = this.resolveFirstEnemyHintTarget();
+
+        if (!ground || !target) {
+            return;
+        }
+
+        const groundY = this.resolveNodeYInContainer(ground, container);
+        const targetY = this.resolveNodeYInContainer(target, container);
+        this.cachedFloorOffsetFromGround = targetY - groundY;
+    }
+
+    private resolveGroundNode() {
+        if (this.cachedGroundNode?.isValid) {
+            return this.cachedGroundNode;
+        }
+
+        const world = this.node.parent ?? this.node.scene ?? this.node;
+        this.cachedGroundNode = world.getChildByName('Ground');
+        return this.cachedGroundNode;
+    }
+
+    private resolveNodeYInContainer(target: Node, container: Node) {
+        const worldPosition = target.worldPosition;
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(worldPosition).y;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, worldPosition);
+        return localPosition.y;
+    }
+
+    private resolveFootOffset(node: Node) {
+        const transform = node.getComponent(UITransform);
+        if (transform) {
+            return transform.height * transform.anchorPoint.y * Math.abs(node.scale.y);
+        }
+
+        const collider = node.getComponent(BoxCollider2D);
+        if (!collider) {
+            return 0;
+        }
+
+        const bottom = collider.offset.y - collider.size.height * 0.5;
+        return -bottom * Math.abs(node.scale.y);
     }
 
     private isDescendantOf(node: Node, parent: Node) {

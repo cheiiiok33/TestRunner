@@ -44,8 +44,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -400.8213256164979,
-      "y": -87.98173528845439,
+      "x": 93.492,
+      "y": -303.432,
       "z": 0
     },
     "_lrot": {
@@ -85,8 +85,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 162,
-      "height": 350
+      "width": 400,
+      "height": 800
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -127,7 +127,7 @@
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -254,6 +254,7 @@
       "__id__": 13
     },
     "scrollSpeed": 320,
+    "extraMoveSpeed": 0,
     "leftBound": -900,
     "resetX": 900,
     "randomOffsetXMin": 0,
@@ -266,6 +267,10 @@
     "colliderSensor": true,
     "walkAnimationName": "EnemyWalking",
     "followTarget": null,
+    "triggerFirstEnemyHint": true,
+    "firstEnemyHintX": -80,
+    "firstEnemyHintTarget": null,
+    "firstEnemyHintLeadDistance": 300,
     "_id": ""
   },
   {

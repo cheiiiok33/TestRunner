@@ -102,6 +102,7 @@ export class PlayableResponsiveLayout extends Component {
     private lastSafeKey = '';
     private lastViewportWidth = 0;
     private lastViewportHeight = 0;
+    private heroBaseX = 0;
     private heroBaseY = 0;
     private groundBaseY = 0;
     private readonly handBaseScale = new Vec3(1, 1, 1);
@@ -118,8 +119,14 @@ export class PlayableResponsiveLayout extends Component {
 
     onLoad() {
         this.ground = this.ground ?? this.node.scene?.getChildByName('Ground') ?? this.node.getChildByName('Ground');
+        this.heroBaseX = this.hero?.position.x ?? 0;
         this.heroBaseY = this.hero?.position.y ?? 0;
         this.groundBaseY = this.ground?.position.y ?? 0;
+        const playerController = this.hero?.getComponent(RunnerPlayerController);
+        if (this.hero && playerController) {
+            playerController.fixedX = this.heroBaseX;
+            this.hero.setPosition(this.heroBaseX, this.hero.position.y, this.hero.position.z);
+        }
 
         if (this.hand) {
             this.handBaseScale.set(this.hand.scale);
@@ -298,10 +305,6 @@ export class PlayableResponsiveLayout extends Component {
         this.lastPortrait = isPortrait;
         this.lastSafeKey = safeInsets.key;
 
-        const halfWidth = visible.width * 0.5;
-        const left = -halfWidth + safeInsets.left;
-        const right = halfWidth - safeInsets.right;
-
         this.applySafeAreaToWidgets(safeInsets);
 
         if (this.camera) {
@@ -316,15 +319,11 @@ export class PlayableResponsiveLayout extends Component {
         this.layoutGround(visible.width, safeInsets.left + safeInsets.right);
 
         if (this.hero) {
-            const x = left + 120;
+            const x = this.resolveHeroX(isPortrait);
             const y = this.resolveHeroY(isPortrait);
             const scale = isPortrait ? this.portraitHeroScale : this.landscapeHeroScale;
             const playerController = this.hero.getComponent(RunnerPlayerController);
-            const safeX = this.clamp(
-                x,
-                left + this.portraitHeroMinLeftPadding,
-                right - this.portraitHeroMaxRightPadding,
-            );
+            const safeX = x;
             if (playerController) {
                 playerController.fixedX = safeX;
             }
@@ -462,5 +461,9 @@ export class PlayableResponsiveLayout extends Component {
         }
 
         return isPortrait ? this.portraitHeroY : this.landscapeHeroY;
+    }
+
+    private resolveHeroX(_isPortrait: boolean) {
+        return this.heroBaseX;
     }
 }

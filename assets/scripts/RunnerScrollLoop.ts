@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, UITransform, Vec3 } from 'cc';
+import { _decorator, Component, Node, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 
 const { ccclass, property } = _decorator;
@@ -50,7 +50,8 @@ export class RunnerScrollLoop extends Component {
             this.node.setWorldPosition(nextX, currentPosition.y, currentPosition.z);
         }
 
-        if (nextX > this.leftBound) {
+        const resetThresholdX = this.resolveResetThresholdX();
+        if (nextX > resetThresholdX) {
             return;
         }
 
@@ -68,19 +69,56 @@ export class RunnerScrollLoop extends Component {
         }
 
         this.cachedWidth = this.resolveLoopWidth();
-        return this.node.position.x + this.cachedWidth * 2;
+        const trailingX = this.findTrailingLoopX();
+        if (trailingX !== null) {
+            return trailingX + this.cachedWidth;
+        }
+
+        return this.node.position.x + this.cachedWidth;
+    }
+
+    private resolveResetThresholdX() {
+        if (!this.useAutoLoop) {
+            return this.leftBound;
+        }
+
+        this.cachedWidth = this.resolveLoopWidth();
+        const visible = view.getVisibleSize();
+        return -visible.width * 0.5 - this.cachedWidth * 0.5;
     }
 
     private resolveLoopWidth() {
-        if (this.loopWidth > 0) {
-            return this.loopWidth;
-        }
-
         const transform = this.getComponent(UITransform);
-        if (!transform) {
-            return 0;
+        const measuredWidth = transform ? transform.width * Math.abs(this.node.scale.x) : 0;
+
+        if (this.loopWidth > 0) {
+            return Math.max(this.loopWidth, measuredWidth);
         }
 
-        return transform.width * this.node.scale.x;
+        return measuredWidth;
+    }
+
+    private findTrailingLoopX() {
+        const parent = this.node.parent;
+        if (!parent) {
+            return null;
+        }
+
+        let trailingX: number | null = null;
+        for (const sibling of parent.children) {
+            if (sibling === this.node || !sibling.isValid) {
+                continue;
+            }
+
+            const siblingLoop = sibling.getComponent(RunnerScrollLoop);
+            if (!siblingLoop) {
+                continue;
+            }
+
+            const siblingPosition = this.useLocalPosition ? sibling.position : sibling.worldPosition;
+            trailingX = trailingX === null ? siblingPosition.x : Math.max(trailingX, siblingPosition.x);
+        }
+
+        return trailingX;
     }
 }

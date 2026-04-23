@@ -1,4 +1,4 @@
-import { _decorator, Collider2D, Component, instantiate, Node, Prefab, view } from 'cc';
+import { _decorator, BoxCollider2D, Collider2D, Component, instantiate, Node, Prefab, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
 
@@ -40,6 +40,15 @@ export class RunnerFinishSpawner extends Component {
     spawnRightPadding = 420;
 
     @property
+    spawnDistanceFromPlayer = 1600;
+
+    @property
+    alignSpawnYToPlayer = true;
+
+    @property
+    finishYOffsetFromPlayer = 0;
+
+    @property
     leftBoundPadding = 420;
 
     @property
@@ -48,6 +57,14 @@ export class RunnerFinishSpawner extends Component {
     private elapsedAfterStart = 0;
     private hasSpawned = false;
     private activeFinish: Node | null = null;
+    private cachedGroundNode: Node | null = null;
+    private cachedPlayerNode: Node | null = null;
+    private cachedFloorOffsetFromGround: number | null = null;
+
+    onLoad() {
+        this.syncSpawnBoundsToVisibleArea();
+        this.captureFloorOffsetFromGround();
+    }
 
     update(deltaTime: number) {
         if (!RunnerGameManager.isStarted || RunnerGameManager.isFinished) {
@@ -77,7 +94,7 @@ export class RunnerFinishSpawner extends Component {
         container.addChild(finish);
         this.placeBehindTarget(finish, container);
         this.raisePlayerAboveFinish(container);
-        finish.setPosition(this.spawnX, this.spawnY, 0);
+        finish.setPosition(this.spawnX, this.resolveSpawnY(finish, container), 0);
         this.configureFinishColliders(finish);
         this.activeFinish = finish;
         RunnerGameManager.markFinishSpawned();
@@ -185,8 +202,125 @@ export class RunnerFinishSpawner extends Component {
 
         const visible = view.getVisibleSize();
         const halfWidth = visible.width * 0.5;
+        const playerX = this.resolvePlayerX();
 
-        this.spawnX = halfWidth + this.spawnRightPadding;
+        this.spawnX = Math.max(
+            halfWidth + this.spawnRightPadding,
+            playerX + this.spawnDistanceFromPlayer,
+        );
         this.leftBound = -halfWidth - this.leftBoundPadding;
+    }
+
+    private resolveSpawnY(finish: Node, container: Node) {
+        if (!this.alignSpawnYToPlayer) {
+            return this.spawnY;
+        }
+
+        const floorY = this.resolveGameplayFloorY(container);
+        if (floorY === null) {
+            return this.spawnY;
+        }
+
+        return floorY + this.resolveFootOffset(finish) + this.finishYOffsetFromPlayer;
+    }
+
+    private resolveGameplayFloorY(container: Node) {
+        const ground = this.resolveGroundNode();
+        if (!ground) {
+            const player = this.resolvePlayerNode();
+            return player ? this.resolveNodeYInContainer(player, container) : null;
+        }
+
+        const currentGroundY = this.resolveNodeYInContainer(ground, container);
+        if (currentGroundY === null) {
+            return null;
+        }
+
+        if (this.cachedFloorOffsetFromGround === null) {
+            const player = this.resolvePlayerNode();
+            const playerY = player ? this.resolveNodeYInContainer(player, container) : null;
+            if (playerY === null) {
+                return null;
+            }
+
+            this.cachedFloorOffsetFromGround = playerY - currentGroundY;
+        }
+
+        return currentGroundY + this.cachedFloorOffsetFromGround;
+    }
+
+    private captureFloorOffsetFromGround() {
+        const container = this.resolveSpawnContainer();
+        const ground = this.resolveGroundNode();
+        const player = this.resolvePlayerNode();
+
+        if (!ground || !player) {
+            return;
+        }
+
+        const groundY = this.resolveNodeYInContainer(ground, container);
+        const playerY = this.resolveNodeYInContainer(player, container);
+        this.cachedFloorOffsetFromGround = playerY - groundY;
+    }
+
+    private resolveGroundNode() {
+        if (this.cachedGroundNode?.isValid) {
+            return this.cachedGroundNode;
+        }
+
+        const world = this.node.parent ?? this.node.scene ?? this.node;
+        this.cachedGroundNode = world.getChildByName('Ground');
+        return this.cachedGroundNode;
+    }
+
+    private resolvePlayerNode() {
+        if (this.renderBeforeNode?.isValid) {
+            return this.renderBeforeNode;
+        }
+
+        if (this.cachedPlayerNode?.isValid) {
+            return this.cachedPlayerNode;
+        }
+
+        const container = this.resolveSpawnContainer();
+        this.cachedPlayerNode = this.findPlayerNode(container);
+        return this.cachedPlayerNode;
+    }
+
+    private resolvePlayerX() {
+        const player = this.resolvePlayerNode();
+        if (!player) {
+            return 0;
+        }
+
+        const controller = player.getComponent(RunnerPlayerController);
+        return controller?.fixedX ?? player.position.x;
+    }
+
+    private resolveNodeYInContainer(target: Node, container: Node) {
+        const worldPosition = target.worldPosition;
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(worldPosition).y;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, worldPosition);
+        return localPosition.y;
+    }
+
+    private resolveFootOffset(node: Node) {
+        const transform = node.getComponent(UITransform);
+        if (transform) {
+            return transform.height * transform.anchorPoint.y * Math.abs(node.scale.y);
+        }
+
+        const collider = node.getComponent(BoxCollider2D);
+        if (!collider) {
+            return 0;
+        }
+
+        const bottom = collider.offset.y - collider.size.height * 0.5;
+        return -bottom * Math.abs(node.scale.y);
     }
 }

@@ -1,6 +1,7 @@
 import { _decorator, Animation, Collider2D, Component, Node, randomRange, Vec3 } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerEvadeButtonPulse } from './RunnerEvadeButtonPulse';
+import { RunnerPlayerController } from './RunnerPlayerController';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
 
 const { ccclass, property } = _decorator;
@@ -54,6 +55,12 @@ export class RunnerObstacleScroller extends Component {
 
     @property
     firstEnemyHintX = -80;
+
+    @property(Node)
+    firstEnemyHintTarget: Node | null = null;
+
+    @property
+    firstEnemyHintLeadDistance = 300;
 
     private startY = 0;
     private animation: Animation | null = null;
@@ -164,6 +171,16 @@ export class RunnerObstacleScroller extends Component {
     }
 
     private shouldTriggerFirstEnemyHint(nextX: number) {
-        return this.triggerFirstEnemyHint && !this.hasTriggeredFirstEnemyHint && nextX <= this.firstEnemyHintX;
+        if (!this.triggerFirstEnemyHint || this.hasTriggeredFirstEnemyHint) {
+            return false;
+        }
+
+        if (!this.firstEnemyHintTarget?.isValid) {
+            return nextX <= this.firstEnemyHintX;
+        }
+
+        const playerController = this.firstEnemyHintTarget.getComponent(RunnerPlayerController);
+        const targetX = playerController?.fixedX ?? this.firstEnemyHintTarget.position.x;
+        return nextX <= targetX + this.firstEnemyHintLeadDistance;
     }
 }
