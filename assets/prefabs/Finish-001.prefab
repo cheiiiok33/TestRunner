@@ -45,8 +45,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -261.71437404751146,
-      "y": -199.04294871849908,
+      "x": 1074.3060506993509,
+      "y": -510.60477880976134,
       "z": 0
     },
     "_lrot": {
@@ -136,8 +136,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 400,
-      "height": 80
+      "width": 800,
+      "height": 160
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -272,8 +272,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 6,
-      "height": 80
+      "width": 12,
+      "height": 160
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -367,8 +367,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 1023.27,
-      "y": -117.483,
+      "x": 975.502,
+      "y": -77.95,
       "z": 0
     },
     "_lrot": {
@@ -408,8 +408,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 6,
-      "height": 70
+      "width": 12,
+      "height": 140
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -503,8 +503,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 1032.402,
-      "y": -125.966,
+      "x": 986.281,
+      "y": -65.02,
       "z": 0
     },
     "_lrot": {
@@ -544,8 +544,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 23,
-      "height": 60
+      "width": 46,
+      "height": 120
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -639,8 +639,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 1069.857,
-      "y": -148.597,
+      "x": 1059.974,
+      "y": -127.183,
       "z": 0
     },
     "_lrot": {
@@ -680,8 +680,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 23,
-      "height": 60
+      "width": 46,
+      "height": 120
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -789,7 +789,6 @@
       "__id__": 0
     },
     "fileId": "e3BgStLoRDd4WkRGW6smQO",
-    "instance": null,
     "targetOverrides": null
   }
 ]

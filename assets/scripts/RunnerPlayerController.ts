@@ -391,7 +391,12 @@ export class RunnerPlayerController extends Component {
     private resolveFinishRoot(node: Node) {
         let current: Node | null = node;
 
-        while (current?.parent && current.parent !== this.node.parent) {
+        while (current?.parent) {
+            const parent = current.parent;
+            if (parent === this.node.scene || parent.name === 'Canvas' || parent.name === 'World') {
+                break;
+            }
+
             current = current.parent;
         }
 

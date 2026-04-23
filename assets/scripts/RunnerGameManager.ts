@@ -130,6 +130,9 @@ export class RunnerGameManager extends Component {
     @property(Prefab)
     finishedFinishPrefab: Prefab | null = null;
 
+    @property(Prefab)
+    confettiPiecePrefab: Prefab | null = null;
+
     @property
     winTitleText = 'Congratulations!\nChoose your reward!';
 
@@ -513,10 +516,32 @@ export class RunnerGameManager extends Component {
         this.fadeOutNode(this.hintFinger);
         this.fadeOutNode(this.hintTextNode);
 
-        this.finishCelebration?.play();
+        const finishCelebration = this.finishCelebration ?? this.ensureFinishCelebration();
+        finishCelebration?.play();
         this.playEffect(this.confetti);
-        const winDelay = Math.max(this.winGameDelay, this.finishCelebration?.winScreenDelay ?? 0);
+        const winDelay = Math.max(this.winGameDelay, finishCelebration?.winScreenDelay ?? 0);
         this.scheduleOnce(() => this.showWinGame(), winDelay);
+    }
+
+    private ensureFinishCelebration() {
+        if (this.finishCelebration?.isValid) {
+            return this.finishCelebration;
+        }
+
+        if (!this.confettiPiecePrefab) {
+            return null;
+        }
+
+        const container = this.node.scene?.getChildByName('Canvas') ?? this.node.parent ?? this.node.scene ?? this.node;
+        const celebrationNode = new Node('FinishCelebration');
+        container.addChild(celebrationNode);
+        celebrationNode.setPosition(0, 0, 0);
+
+        const celebration = celebrationNode.addComponent(RunnerFinishCelebration);
+        celebration.piecePrefab = this.confettiPiecePrefab;
+        celebration.spawnContainer = container;
+        this.finishCelebration = celebration;
+        return celebration;
     }
 
     private showWinGame() {

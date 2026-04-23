@@ -1,6 +1,7 @@
 import { _decorator, BoxCollider2D, Camera, Color, Component, game, Node, ResolutionPolicy, screen, Size, UITransform, Vec3, view, Widget } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
+import { RunnerScrollLoop } from './RunnerScrollLoop';
 
 const { ccclass, property } = _decorator;
 
@@ -82,10 +83,16 @@ export class PlayableResponsiveLayout extends Component {
     landscapeGameplayHeight = 720;
 
     @property
-    backgroundTileWidth = 1707;
+    backgroundTileWidth = 4000;
 
     @property
-    backgroundTileHeight = 720;
+    backgroundTileHeight = 2368;
+
+    @property
+    backgroundTileOverlap = 16;
+
+    @property
+    backgroundTileBleed = 260;
 
     @property
     groundExtraWidth = 600;
@@ -118,6 +125,7 @@ export class PlayableResponsiveLayout extends Component {
     };
 
     onLoad() {
+        this.applyBootstrapBackgroundColor();
         this.ground = this.ground ?? this.node.scene?.getChildByName('Ground') ?? this.node.getChildByName('Ground');
         this.heroBaseX = this.hero?.position.x ?? 0;
         this.heroBaseY = this.hero?.position.y ?? 0;
@@ -219,6 +227,7 @@ export class PlayableResponsiveLayout extends Component {
             return;
         }
 
+        this.applyBootstrapBackgroundColor();
         const viewportSize = this.getViewportSize();
         if (
             Math.abs(viewportSize.width - this.lastViewportWidth) < 0.5 &&
@@ -282,6 +291,48 @@ export class PlayableResponsiveLayout extends Component {
         }
     }
 
+    private applyBootstrapBackgroundColor() {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        const backgroundColor = this.toCssColor(this.playableClearColor);
+        const body = document.body;
+        const root = document.documentElement;
+        const canvas = game.canvas;
+        const container = game.container;
+        const gameDiv = document.getElementById('GameDiv');
+        const cocosContainer = document.getElementById('Cocos3dGameContainer');
+
+        if (body) {
+            body.style.backgroundColor = backgroundColor;
+        }
+
+        if (root) {
+            root.style.backgroundColor = backgroundColor;
+        }
+
+        if (gameDiv) {
+            gameDiv.style.backgroundColor = backgroundColor;
+        }
+
+        if (cocosContainer) {
+            cocosContainer.style.backgroundColor = backgroundColor;
+        }
+
+        if (container) {
+            container.style.backgroundColor = backgroundColor;
+        }
+
+        if (canvas) {
+            canvas.style.backgroundColor = backgroundColor;
+        }
+    }
+
+    private toCssColor(color: Color) {
+        return `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a / 255})`;
+    }
+
     private applyLayout(force: boolean) {
         this.applyViewportStyles();
 
@@ -315,7 +366,7 @@ export class PlayableResponsiveLayout extends Component {
             this.camera.node.setPosition(0, 0, this.camera.node.position.z);
         }
 
-        this.layoutBackgrounds();
+        this.layoutBackgrounds(visible.width, visible.height);
         this.layoutGround(visible.width, safeInsets.left + safeInsets.right);
 
         if (this.hero) {
@@ -355,7 +406,7 @@ export class PlayableResponsiveLayout extends Component {
         }
     }
 
-    private layoutBackgrounds() {
+    private layoutBackgrounds(visibleWidth: number, visibleHeight: number) {
         if (!this.gameWorld) {
             return;
         }
@@ -378,13 +429,27 @@ export class PlayableResponsiveLayout extends Component {
                     this.backgroundBaseSizes.set(background, baseSize);
                 }
 
-                if (Math.abs(transform.width - baseSize.width) > 0.5 || Math.abs(transform.height - baseSize.height) > 0.5) {
-                    transform.setContentSize(baseSize.width, baseSize.height);
+                const overlap = Math.max(0, this.backgroundTileOverlap);
+                const bleed = Math.max(0, this.backgroundTileBleed);
+                const targetWidth = Math.max(baseSize.width, visibleWidth + bleed * 2 + overlap + 32);
+                const targetHeight = Math.max(baseSize.height, visibleHeight);
+
+                if (Math.abs(transform.width - targetWidth) > 0.5 || Math.abs(transform.height - targetHeight) > 0.5) {
+                    transform.setContentSize(targetWidth, targetHeight);
                 }
             }
 
-            const spacing = transform ? transform.width : this.backgroundTileWidth;
-            background.setPosition(index * spacing, 0, background.position.z);
+            const visualWidth = transform ? transform.width : this.backgroundTileWidth;
+            const overlap = Math.max(0, this.backgroundTileOverlap);
+            const bleed = Math.max(0, this.backgroundTileBleed);
+            const spacing = Math.max(1, visualWidth - overlap);
+            background.setPosition(index * spacing - bleed, 0, background.position.z);
+
+            const scroller = background.getComponent(RunnerScrollLoop);
+            if (scroller) {
+                scroller.autoLoopOverlap = overlap;
+                scroller.autoLoopLeadBleed = bleed;
+            }
         });
     }
 

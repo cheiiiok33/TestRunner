@@ -1,6 +1,7 @@
 import { _decorator, BoxCollider2D, Collider2D, Component, instantiate, Node, Prefab, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
+import { RunnerScrollLoop } from './RunnerScrollLoop';
 
 const { ccclass, property } = _decorator;
 
@@ -14,6 +15,9 @@ export class RunnerFinishSpawner extends Component {
 
     @property(Node)
     renderBeforeNode: Node | null = null;
+
+    @property(Node)
+    scrollTarget: Node | null = null;
 
     @property
     keepPlayerOnTop = true;
@@ -59,10 +63,12 @@ export class RunnerFinishSpawner extends Component {
     private activeFinish: Node | null = null;
     private cachedGroundNode: Node | null = null;
     private cachedPlayerNode: Node | null = null;
+    private cachedScrollTarget: Node | null = null;
     private cachedFloorOffsetFromGround: number | null = null;
 
     onLoad() {
         this.syncSpawnBoundsToVisibleArea();
+        this.syncScrollSpeed();
         this.captureFloorOffsetFromGround();
     }
 
@@ -72,6 +78,7 @@ export class RunnerFinishSpawner extends Component {
         }
 
         this.syncSpawnBoundsToVisibleArea();
+        this.syncScrollSpeed();
         this.elapsedAfterStart += deltaTime;
 
         if (!this.hasSpawned && this.elapsedAfterStart >= this.spawnDelay) {
@@ -295,6 +302,29 @@ export class RunnerFinishSpawner extends Component {
 
         const controller = player.getComponent(RunnerPlayerController);
         return controller?.fixedX ?? player.position.x;
+    }
+
+    private syncScrollSpeed() {
+        const target = this.resolveScrollTarget();
+        if (!target) {
+            return;
+        }
+
+        this.scrollSpeed = target.getComponent(RunnerScrollLoop)?.scrollSpeed ?? this.scrollSpeed;
+    }
+
+    private resolveScrollTarget() {
+        if (this.scrollTarget?.isValid) {
+            return this.scrollTarget;
+        }
+
+        if (this.cachedScrollTarget?.isValid) {
+            return this.cachedScrollTarget;
+        }
+
+        const container = this.node.parent ?? this.node.scene ?? this.node;
+        this.cachedScrollTarget = container.children.find((child) => child.getComponent(RunnerScrollLoop)) ?? null;
+        return this.cachedScrollTarget;
     }
 
     private resolveNodeYInContainer(target: Node, container: Node) {

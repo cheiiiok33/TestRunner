@@ -39,8 +39,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 613.2576083696056,
-      "y": 72.59640321087647,
+      "x": 1753.5688195873329,
+      "y": -187.60900730962817,
       "z": 0
     },
     "_lrot": {
@@ -282,8 +282,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 41.801,
-      "y": -33.204,
+      "x": 73.511,
+      "y": -64.915,
       "z": 0
     },
     "_lrot": {
@@ -323,7 +323,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 67.3837890625,
+      "width": 109.6396484375,
       "height": 54.4
     },
     "_anchorPoint": {
@@ -362,8 +362,8 @@
     "_string": "label",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 30,
-    "_fontSize": 30,
+    "_actualFontSize": 50,
+    "_fontSize": 50,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 0,
@@ -449,7 +449,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -140.721,
+      "y": -276.019,
       "z": 0
     },
     "_lrot": {
@@ -648,8 +648,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 300,
-      "height": 60
+      "width": 600,
+      "height": 120
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -792,8 +792,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 300,
-      "height": 200
+      "width": 600,
+      "height": 400
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -888,7 +888,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 162.856,
+      "y": 334.093,
       "z": 0
     },
     "_lrot": {
@@ -928,7 +928,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 67.3837890625,
+      "width": 109.6396484375,
       "height": 54.4
     },
     "_anchorPoint": {
@@ -967,8 +967,8 @@
     "_string": "label",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 30,
-    "_fontSize": 30,
+    "_actualFontSize": 50,
+    "_fontSize": 50,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 0,

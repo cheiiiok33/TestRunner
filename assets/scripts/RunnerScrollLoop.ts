@@ -21,15 +21,22 @@ export class RunnerScrollLoop extends Component {
     loopWidth = 0;
 
     @property
+    autoLoopOverlap = 0;
+
+    @property
+    autoLoopLeadBleed = 0;
+
+    @property
     useLocalPosition = true;
 
     @property(Node)
     followTarget: Node | null = null;
 
-    private cachedWidth = 0;
+    private cachedVisualWidth = 0;
+    private cachedStepWidth = 0;
 
     onLoad() {
-        this.cachedWidth = this.resolveLoopWidth();
+        this.refreshLoopMetrics();
     }
 
     update(deltaTime: number) {
@@ -68,13 +75,13 @@ export class RunnerScrollLoop extends Component {
             return this.resetX;
         }
 
-        this.cachedWidth = this.resolveLoopWidth();
+        this.refreshLoopMetrics();
         const trailingX = this.findTrailingLoopX();
         if (trailingX !== null) {
-            return trailingX + this.cachedWidth;
+            return trailingX + this.cachedStepWidth;
         }
 
-        return this.node.position.x + this.cachedWidth;
+        return this.node.position.x + this.cachedStepWidth;
     }
 
     private resolveResetThresholdX() {
@@ -82,9 +89,14 @@ export class RunnerScrollLoop extends Component {
             return this.leftBound;
         }
 
-        this.cachedWidth = this.resolveLoopWidth();
+        this.refreshLoopMetrics();
         const visible = view.getVisibleSize();
-        return -visible.width * 0.5 - this.cachedWidth * 0.5;
+        return -visible.width * 0.5 - this.cachedVisualWidth * 0.5 - this.resolveAutoLoopLeadBleed();
+    }
+
+    private refreshLoopMetrics() {
+        this.cachedVisualWidth = this.resolveLoopWidth();
+        this.cachedStepWidth = Math.max(1, this.cachedVisualWidth - this.resolveAutoLoopOverlap());
     }
 
     private resolveLoopWidth() {
@@ -96,6 +108,14 @@ export class RunnerScrollLoop extends Component {
         }
 
         return measuredWidth;
+    }
+
+    private resolveAutoLoopOverlap() {
+        return Math.max(0, this.autoLoopOverlap);
+    }
+
+    private resolveAutoLoopLeadBleed() {
+        return Math.max(0, this.autoLoopLeadBleed);
     }
 
     private findTrailingLoopX() {
