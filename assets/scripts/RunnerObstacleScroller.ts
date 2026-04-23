@@ -1,4 +1,4 @@
-import { _decorator, Animation, Collider2D, Component, Node, randomRange, Vec3 } from 'cc';
+import { _decorator, Animation, Collider2D, Component, Node, randomRange, Rect, UITransform, Vec3 } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerEvadeButtonPulse } from './RunnerEvadeButtonPulse';
 import { RunnerPlayerController } from './RunnerPlayerController';
@@ -106,7 +106,7 @@ export class RunnerObstacleScroller extends Component {
             return;
         }
 
-        if (nextX > this.leftBound) {
+        if (this.getNodeRightEdgeInParent() > this.leftBound) {
             return;
         }
 
@@ -182,5 +182,44 @@ export class RunnerObstacleScroller extends Component {
         const playerController = this.firstEnemyHintTarget.getComponent(RunnerPlayerController);
         const targetX = playerController?.fixedX ?? this.firstEnemyHintTarget.position.x;
         return nextX <= targetX + this.firstEnemyHintLeadDistance;
+    }
+
+    private getNodeRightEdgeInParent() {
+        const parent = this.node.parent;
+        if (!parent) {
+            return this.node.position.x;
+        }
+
+        const transform = this.node.getComponent(UITransform);
+        if (!transform) {
+            return this.node.position.x;
+        }
+
+        const worldBounds = transform.getBoundingBoxToWorld();
+        const boundsInParent = this.convertWorldRectToParentRect(worldBounds, parent);
+        return boundsInParent.xMax;
+    }
+
+    private convertWorldRectToParentRect(worldRect: Rect, parent: Node) {
+        const parentTransform = parent.getComponent(UITransform);
+        const minWorld = new Vec3(worldRect.xMin, worldRect.yMin, 0);
+        const maxWorld = new Vec3(worldRect.xMax, worldRect.yMax, 0);
+        const minLocal = new Vec3();
+        const maxLocal = new Vec3();
+
+        if (parentTransform) {
+            parentTransform.convertToNodeSpaceAR(minWorld, minLocal);
+            parentTransform.convertToNodeSpaceAR(maxWorld, maxLocal);
+        } else {
+            parent.inverseTransformPoint(minLocal, minWorld);
+            parent.inverseTransformPoint(maxLocal, maxWorld);
+        }
+
+        return new Rect(
+            Math.min(minLocal.x, maxLocal.x),
+            Math.min(minLocal.y, maxLocal.y),
+            Math.abs(maxLocal.x - minLocal.x),
+            Math.abs(maxLocal.y - minLocal.y),
+        );
     }
 }

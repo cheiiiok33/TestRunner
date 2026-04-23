@@ -1,4 +1,4 @@
-import { _decorator, BoxCollider2D, Collider2D, Component, instantiate, Node, Prefab, UITransform, Vec3, view } from 'cc';
+import { _decorator, BoxCollider2D, Camera, Collider2D, Component, instantiate, Node, Prefab, Rect, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
@@ -65,6 +65,7 @@ export class RunnerFinishSpawner extends Component {
     private cachedPlayerNode: Node | null = null;
     private cachedScrollTarget: Node | null = null;
     private cachedFloorOffsetFromGround: number | null = null;
+    private cachedCamera: Camera | null = null;
 
     onLoad() {
         this.syncSpawnBoundsToVisibleArea();
@@ -102,6 +103,7 @@ export class RunnerFinishSpawner extends Component {
         this.placeBehindTarget(finish, container);
         this.raisePlayerAboveFinish(container);
         finish.setPosition(this.spawnX, this.resolveSpawnY(finish, container), 0);
+        this.shiftNodeLeftEdgeTo(finish, container, this.spawnX);
         this.configureFinishColliders(finish);
         this.activeFinish = finish;
         RunnerGameManager.markFinishSpawned();
@@ -207,15 +209,16 @@ export class RunnerFinishSpawner extends Component {
             return;
         }
 
-        const visible = view.getVisibleSize();
-        const halfWidth = visible.width * 0.5;
-        const playerX = this.resolvePlayerX();
+        const container = this.resolveSpawnContainer();
+        const rightEdgeX = this.resolveVisibleEdgeX(container, true);
+        const leftEdgeX = this.resolveVisibleEdgeX(container, false);
+        const playerX = this.resolvePlayerX(container);
 
         this.spawnX = Math.max(
-            halfWidth + this.spawnRightPadding,
+            rightEdgeX + this.spawnRightPadding,
             playerX + this.spawnDistanceFromPlayer,
         );
-        this.leftBound = -halfWidth - this.leftBoundPadding;
+        this.leftBound = leftEdgeX - this.leftBoundPadding;
     }
 
     private resolveSpawnY(finish: Node, container: Node) {
@@ -294,14 +297,14 @@ export class RunnerFinishSpawner extends Component {
         return this.cachedPlayerNode;
     }
 
-    private resolvePlayerX() {
+    private resolvePlayerX(container: Node) {
         const player = this.resolvePlayerNode();
         if (!player) {
             return 0;
         }
 
         const controller = player.getComponent(RunnerPlayerController);
-        return controller?.fixedX ?? player.position.x;
+        return this.resolveNodeXInContainer(player, container) ?? controller?.fixedX ?? player.position.x;
     }
 
     private syncScrollSpeed() {
@@ -337,6 +340,121 @@ export class RunnerFinishSpawner extends Component {
         const localPosition = new Vec3();
         container.inverseTransformPoint(localPosition, worldPosition);
         return localPosition.y;
+    }
+
+    private resolveNodeXInContainer(target: Node, container: Node) {
+        const worldPosition = target.worldPosition;
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(worldPosition).x;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, worldPosition);
+        return localPosition.x;
+    }
+
+    private resolveVisibleEdgeX(container: Node, isRightEdge: boolean) {
+        const camera = this.resolveCamera();
+        if (!camera) {
+            const visible = view.getVisibleSize();
+            return (isRightEdge ? 1 : -1) * visible.width * 0.5;
+        }
+
+        const frame = view.getFrameSize();
+        const viewportWidth = Math.max(1, frame.width * camera.rect.width);
+        const viewportHeight = Math.max(1, frame.height * camera.rect.height);
+        const aspect = viewportWidth / viewportHeight;
+        const halfWorldWidth = camera.orthoHeight * aspect;
+        const edgeX = camera.node.worldPosition.x + (isRightEdge ? halfWorldWidth : -halfWorldWidth);
+        const visibleEdgeWorld = new Vec3(edgeX, camera.node.worldPosition.y, 0);
+
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(visibleEdgeWorld).x;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, visibleEdgeWorld);
+        return localPosition.x;
+    }
+
+    private shiftNodeLeftEdgeTo(node: Node, container: Node, targetLeftX: number) {
+        const bounds = this.getNodeBoundsInContainer(node, container);
+        if (!bounds) {
+            return;
+        }
+
+        const deltaX = targetLeftX - bounds.xMin;
+        if (Math.abs(deltaX) <= 0.01) {
+            return;
+        }
+
+        const position = node.position;
+        node.setPosition(position.x + deltaX, position.y, position.z);
+    }
+
+    private resolveCamera() {
+        if (this.cachedCamera?.isValid) {
+            return this.cachedCamera;
+        }
+
+        const scene = this.node.scene;
+        if (!scene) {
+            return null;
+        }
+
+        this.cachedCamera = this.findCamera(scene);
+        return this.cachedCamera;
+    }
+
+    private findCamera(root: Node): Camera | null {
+        const camera = root.getComponent(Camera);
+        if (camera) {
+            return camera;
+        }
+
+        for (const child of root.children) {
+            const camera = this.findCamera(child);
+            if (camera) {
+                return camera;
+            }
+        }
+
+        return null;
+    }
+
+    private getNodeBoundsInContainer(node: Node, container: Node) {
+        const transform = node.getComponent(UITransform);
+        if (!transform) {
+            return null;
+        }
+
+        const worldBounds = transform.getBoundingBoxToWorld();
+        return this.convertWorldRectToContainerRect(worldBounds, container);
+    }
+
+    private convertWorldRectToContainerRect(worldRect: Rect, container: Node) {
+        const containerTransform = container.getComponent(UITransform);
+        const minWorld = new Vec3(worldRect.xMin, worldRect.yMin, 0);
+        const maxWorld = new Vec3(worldRect.xMax, worldRect.yMax, 0);
+        const minLocal = new Vec3();
+        const maxLocal = new Vec3();
+
+        if (containerTransform) {
+            containerTransform.convertToNodeSpaceAR(minWorld, minLocal);
+            containerTransform.convertToNodeSpaceAR(maxWorld, maxLocal);
+        } else {
+            container.inverseTransformPoint(minLocal, minWorld);
+            container.inverseTransformPoint(maxLocal, maxWorld);
+        }
+
+        return new Rect(
+            Math.min(minLocal.x, maxLocal.x),
+            Math.min(minLocal.y, maxLocal.y),
+            Math.abs(maxLocal.x - minLocal.x),
+            Math.abs(maxLocal.y - minLocal.y),
+        );
     }
 
     private resolveFootOffset(node: Node) {

@@ -1,4 +1,4 @@
-import { _decorator, CCFloat, Component, instantiate, Node, Prefab, randomRange, view } from 'cc';
+import { _decorator, CCFloat, Camera, Component, instantiate, Node, Prefab, randomRange, Rect, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
 
@@ -48,6 +48,7 @@ export class RunnerMoneySpawner extends Component {
     private distanceToNextSpawn = 0;
     private spawnIndex = 0;
     private activePatterns: Node[] = [];
+    private cachedCamera: Camera | null = null;
 
     onLoad() {
         this.distanceToNextSpawn = this.spawnImmediately ? 0 : this.getNextDistance();
@@ -84,6 +85,7 @@ export class RunnerMoneySpawner extends Component {
 
         container.addChild(pattern);
         pattern.setPosition(this.spawnX, spawnY, 0);
+        this.shiftNodeLeftEdgeTo(pattern, container, this.spawnX);
         this.activePatterns.push(pattern);
         this.spawnIndex += 1;
     }
@@ -100,7 +102,7 @@ export class RunnerMoneySpawner extends Component {
             const nextX = position.x - this.scrollSpeed * deltaTime;
             pattern.setPosition(nextX, position.y, position.z);
 
-            if (nextX > this.leftBound) {
+            if (this.getNodeRightEdgeInParent(pattern) > this.leftBound) {
                 continue;
             }
 
@@ -124,11 +126,12 @@ export class RunnerMoneySpawner extends Component {
             return;
         }
 
-        const visible = view.getVisibleSize();
-        const halfWidth = visible.width * 0.5;
+        const container = this.resolveSpawnContainer();
+        const rightEdgeX = this.resolveVisibleEdgeX(container, true);
+        const leftEdgeX = this.resolveVisibleEdgeX(container, false);
 
-        this.spawnX = halfWidth + this.spawnRightPadding;
-        this.leftBound = -halfWidth - this.leftBoundPadding;
+        this.spawnX = rightEdgeX + this.spawnRightPadding;
+        this.leftBound = leftEdgeX - this.leftBoundPadding;
     }
 
     private getNextDistance() {
@@ -174,5 +177,119 @@ export class RunnerMoneySpawner extends Component {
         }
 
         return false;
+    }
+
+    private resolveVisibleEdgeX(container: Node, isRightEdge: boolean) {
+        const camera = this.resolveCamera();
+        if (!camera) {
+            const visible = view.getVisibleSize();
+            return (isRightEdge ? 1 : -1) * visible.width * 0.5;
+        }
+
+        const frame = view.getFrameSize();
+        const viewportWidth = Math.max(1, frame.width * camera.rect.width);
+        const viewportHeight = Math.max(1, frame.height * camera.rect.height);
+        const aspect = viewportWidth / viewportHeight;
+        const halfWorldWidth = camera.orthoHeight * aspect;
+        const edgeX = camera.node.worldPosition.x + (isRightEdge ? halfWorldWidth : -halfWorldWidth);
+        const visibleEdgeWorld = new Vec3(edgeX, camera.node.worldPosition.y, 0);
+
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(visibleEdgeWorld).x;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, visibleEdgeWorld);
+        return localPosition.x;
+    }
+
+    private shiftNodeLeftEdgeTo(node: Node, container: Node, targetLeftX: number) {
+        const bounds = this.getNodeBoundsInContainer(node, container);
+        if (!bounds) {
+            return;
+        }
+
+        const deltaX = targetLeftX - bounds.xMin;
+        if (Math.abs(deltaX) <= 0.01) {
+            return;
+        }
+
+        const position = node.position;
+        node.setPosition(position.x + deltaX, position.y, position.z);
+    }
+
+    private resolveCamera() {
+        if (this.cachedCamera?.isValid) {
+            return this.cachedCamera;
+        }
+
+        const scene = this.node.scene;
+        if (!scene) {
+            return null;
+        }
+
+        this.cachedCamera = this.findCamera(scene);
+        return this.cachedCamera;
+    }
+
+    private findCamera(root: Node): Camera | null {
+        const camera = root.getComponent(Camera);
+        if (camera) {
+            return camera;
+        }
+
+        for (const child of root.children) {
+            const camera = this.findCamera(child);
+            if (camera) {
+                return camera;
+            }
+        }
+
+        return null;
+    }
+
+    private getNodeRightEdgeInParent(node: Node) {
+        const parent = node.parent;
+        if (!parent) {
+            return node.position.x;
+        }
+
+        const bounds = this.getNodeBoundsInContainer(node, parent);
+        return bounds?.xMax ?? node.position.x;
+    }
+
+    private getNodeBoundsInContainer(node: Node, container: Node) {
+        const transform = node.getComponent(UITransform);
+        if (!transform) {
+            return null;
+        }
+
+        const worldBounds = transform.getBoundingBoxToWorld();
+        return this.convertWorldRectToContainerRect(worldBounds, container);
+    }
+
+    private convertWorldRectToContainerRect(worldRect: Rect, container: Node) {
+        const containerTransform = container.getComponent(UITransform);
+        const minWorld = new Vec3(worldRect.xMin, worldRect.yMin, 0);
+        const maxWorld = new Vec3(worldRect.xMax, worldRect.yMax, 0);
+
+        const minLocal = new Vec3();
+        const maxLocal = new Vec3();
+
+        if (containerTransform) {
+            containerTransform.convertToNodeSpaceAR(minWorld, minLocal);
+            containerTransform.convertToNodeSpaceAR(maxWorld, maxLocal);
+        } else {
+            container.inverseTransformPoint(minLocal, minWorld);
+            container.inverseTransformPoint(maxLocal, maxWorld);
+        }
+
+        return new Rect(
+            Math.min(minLocal.x, maxLocal.x),
+            Math.min(minLocal.y, maxLocal.y),
+            Math.abs(maxLocal.x - minLocal.x),
+            Math.abs(maxLocal.y - minLocal.y),
+        );
     }
 }
