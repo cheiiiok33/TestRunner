@@ -67,6 +67,7 @@ export class RunnerScrollLoop extends Component {
             return this.resetX;
         }
 
+        this.cachedWidth = this.resolveLoopWidth();
         return this.node.position.x + this.cachedWidth * 2;
     }
 

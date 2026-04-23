@@ -1,4 +1,4 @@
-import { _decorator, Collider2D, Component, instantiate, Node, Prefab } from 'cc';
+import { _decorator, Collider2D, Component, instantiate, Node, Prefab, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
 
@@ -34,6 +34,15 @@ export class RunnerFinishSpawner extends Component {
     leftBound = -1800;
 
     @property
+    fitSpawnToVisibleBounds = true;
+
+    @property
+    spawnRightPadding = 420;
+
+    @property
+    leftBoundPadding = 420;
+
+    @property
     finishTag = 5;
 
     private elapsedAfterStart = 0;
@@ -45,6 +54,7 @@ export class RunnerFinishSpawner extends Component {
             return;
         }
 
+        this.syncSpawnBoundsToVisibleArea();
         this.elapsedAfterStart += deltaTime;
 
         if (!this.hasSpawned && this.elapsedAfterStart >= this.spawnDelay) {
@@ -166,5 +176,17 @@ export class RunnerFinishSpawner extends Component {
         }
 
         return false;
+    }
+
+    private syncSpawnBoundsToVisibleArea() {
+        if (!this.fitSpawnToVisibleBounds) {
+            return;
+        }
+
+        const visible = view.getVisibleSize();
+        const halfWidth = visible.width * 0.5;
+
+        this.spawnX = halfWidth + this.spawnRightPadding;
+        this.leftBound = -halfWidth - this.leftBoundPadding;
     }
 }

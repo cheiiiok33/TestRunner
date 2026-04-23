@@ -11,6 +11,7 @@ import {
     UIOpacity,
     UITransform,
     Vec3,
+    view,
 } from 'cc';
 
 const { ccclass, property } = _decorator;
@@ -101,10 +102,11 @@ export class RunnerFinishCelebration extends Component {
         piece.setSiblingIndex(container.children.length - 1);
 
         const halfWidth = this.getHalfContainerWidth(container);
+        const halfHeight = this.getHalfContainerHeight(container);
         const startX = side < 0 ? -halfWidth - this.edgePadding : halfWidth + this.edgePadding;
         const targetX = side < 0 ? randomRange(-halfWidth * 0.95, -halfWidth * 0.25) : randomRange(halfWidth * 0.25, halfWidth * 0.95);
-        const startY = this.startY + randomRange(-60, 70);
-        const targetY = this.startY + randomRange(320, 690);
+        const startY = this.clamp(this.startY + randomRange(-60, 70), -halfHeight - 120, halfHeight * 0.35);
+        const targetY = this.clamp(this.startY + randomRange(320, 690), -halfHeight * 0.2, halfHeight - 40);
         const flyTime = randomRange(this.minFlyTime, this.maxFlyTime);
         const scale = randomRange(this.minScale, this.maxScale);
 
@@ -151,10 +153,23 @@ export class RunnerFinishCelebration extends Component {
             return transform.width * 0.5;
         }
 
-        return 640;
+        return view.getVisibleSize().width * 0.5;
+    }
+
+    private getHalfContainerHeight(container: Node) {
+        const transform = container.getComponent(UITransform);
+        if (transform && transform.height > 0) {
+            return transform.height * 0.5;
+        }
+
+        return view.getVisibleSize().height * 0.5;
     }
 
     private pickColor() {
         return this.colors[Math.floor(Math.random() * this.colors.length)];
+    }
+
+    private clamp(value: number, min: number, max: number) {
+        return Math.min(max, Math.max(min, value));
     }
 }

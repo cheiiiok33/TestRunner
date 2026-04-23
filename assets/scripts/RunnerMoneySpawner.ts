@@ -1,4 +1,4 @@
-import { _decorator, CCFloat, Component, instantiate, Node, Prefab, randomRange } from 'cc';
+import { _decorator, CCFloat, Component, instantiate, Node, Prefab, randomRange, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
 
@@ -34,6 +34,15 @@ export class RunnerMoneySpawner extends Component {
     destroyAtLeftBound = true;
 
     @property
+    fitSpawnToVisibleBounds = true;
+
+    @property
+    spawnRightPadding = 320;
+
+    @property
+    leftBoundPadding = 260;
+
+    @property
     spawnImmediately = false;
 
     private distanceToNextSpawn = 0;
@@ -42,6 +51,7 @@ export class RunnerMoneySpawner extends Component {
 
     onLoad() {
         this.distanceToNextSpawn = this.spawnImmediately ? 0 : this.getNextDistance();
+        this.syncSpawnBoundsToVisibleArea();
     }
 
     update(deltaTime: number) {
@@ -49,6 +59,7 @@ export class RunnerMoneySpawner extends Component {
             return;
         }
 
+        this.syncSpawnBoundsToVisibleArea();
         this.syncScrollSpeed();
         this.moveActivePatterns(deltaTime);
 
@@ -106,6 +117,18 @@ export class RunnerMoneySpawner extends Component {
         }
 
         this.scrollSpeed = this.scrollTarget.getComponent(RunnerScrollLoop)?.scrollSpeed ?? this.scrollSpeed;
+    }
+
+    private syncSpawnBoundsToVisibleArea() {
+        if (!this.fitSpawnToVisibleBounds) {
+            return;
+        }
+
+        const visible = view.getVisibleSize();
+        const halfWidth = visible.width * 0.5;
+
+        this.spawnX = halfWidth + this.spawnRightPadding;
+        this.leftBound = -halfWidth - this.leftBoundPadding;
     }
 
     private getNextDistance() {
