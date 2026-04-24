@@ -211,6 +211,10 @@ export class RunnerPlayerController extends Component {
         return this.groundContacts > 0;
     }
 
+    public isSpawnGrounded() {
+        return this.isGrounded();
+    }
+
     private onBeginContact(_self: Collider2D, other: Collider2D, _contact?: IPhysics2DContact | null) {
         if (other.tag === this.groundTag) {
             this.groundContacts += 1;

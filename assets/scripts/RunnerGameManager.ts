@@ -500,7 +500,46 @@ export class RunnerGameManager extends Component {
         replacement.setPosition(position);
         replacement.setScale(scale);
         replacement.angle = angle;
+        this.alignReplacementFinishToSource(finishNode, replacement, parent);
         finishNode.destroy();
+    }
+
+    private alignReplacementFinishToSource(source: Node, replacement: Node, parent: Node) {
+        const sourceTransform = source.getComponent(UITransform);
+        const replacementTransform = replacement.getComponent(UITransform);
+        if (!sourceTransform || !replacementTransform) {
+            return;
+        }
+
+        const sourceBounds = sourceTransform.getBoundingBoxToWorld();
+        const replacementBounds = replacementTransform.getBoundingBoxToWorld();
+        const bottomDelta = sourceBounds.yMin - replacementBounds.yMin;
+
+        if (Math.abs(bottomDelta) <= 0.01) {
+            return;
+        }
+
+        const parentTransform = parent.getComponent(UITransform);
+        const worldShift = new Vec3(0, bottomDelta, 0);
+        const localShift = new Vec3();
+
+        if (parentTransform) {
+            const origin = parentTransform.convertToNodeSpaceAR(new Vec3(0, 0, 0));
+            const shifted = parentTransform.convertToNodeSpaceAR(worldShift);
+            localShift.set(shifted.x - origin.x, shifted.y - origin.y, 0);
+        } else {
+            const origin = new Vec3();
+            const shifted = new Vec3();
+            parent.inverseTransformPoint(origin, new Vec3(0, 0, 0));
+            parent.inverseTransformPoint(shifted, worldShift);
+            localShift.set(shifted.x - origin.x, shifted.y - origin.y, 0);
+        }
+
+        replacement.setPosition(
+            replacement.position.x + localShift.x,
+            replacement.position.y + localShift.y,
+            replacement.position.z,
+        );
     }
 
     private completeFinish() {

@@ -2668,6 +2668,8 @@
     "spawnRightPadding": 320,
     "leftBoundPadding": 260,
     "spawnImmediately": false,
+    "alignSpawnYToPlayer": true,
+    "moneyYOffsetFromPlayer": 500,
     "_id": "e0sylXZZ5Im6lWwWpu/GSl"
   },
   {
@@ -2769,9 +2771,12 @@
     "spawnRightPadding": 420,
     "spawnDistanceFromPlayer": 1600,
     "alignSpawnYToPlayer": true,
-    "finishYOffsetFromPlayer": 80,
+    "finishYOffsetFromPlayer": 260,
     "leftBoundPadding": 420,
     "finishTag": 5,
+    "useProximityFinishTrigger": true,
+    "finishTriggerLeadDistance": 40,
+    "finishDestroySafetyPadding": 120,
     "_id": "5915uN7WNGuoKLssa5tZcD"
   },
   {

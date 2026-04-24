@@ -1,4 +1,4 @@
-import { _decorator, BoxCollider2D, Camera, Collider2D, Component, instantiate, Node, Prefab, Rect, UITransform, Vec3, view } from 'cc';
+import { _decorator, BoxCollider2D, Camera, Collider2D, Component, instantiate, Node, Prefab, Rect, Size, UITransform, Vec2, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
 import { RunnerPlayerController } from './RunnerPlayerController';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
@@ -58,9 +58,22 @@ export class RunnerFinishSpawner extends Component {
     @property
     finishTag = 5;
 
+    @property
+    useProximityFinishTrigger = true;
+
+    @property
+    finishTriggerLeadDistance = 40;
+
+    @property
+    finishDestroySafetyPadding = 120;
+
+    @property
+    finishTriggerNodeName = 'ribbon';
+
     private elapsedAfterStart = 0;
     private hasSpawned = false;
     private activeFinish: Node | null = null;
+    private finishTriggerCommitted = false;
     private cachedGroundNode: Node | null = null;
     private cachedPlayerNode: Node | null = null;
     private cachedScrollTarget: Node | null = null;
@@ -87,10 +100,12 @@ export class RunnerFinishSpawner extends Component {
         }
 
         this.moveFinish(deltaTime);
+        this.tryTriggerFinishByProximity();
     }
 
     private spawnFinish() {
         this.hasSpawned = true;
+        this.finishTriggerCommitted = false;
 
         if (!this.finishPrefab) {
             console.warn('[RunnerFinishSpawner] Assign Finish.prefab in the Finish Prefab field.');
@@ -105,6 +120,7 @@ export class RunnerFinishSpawner extends Component {
         finish.setPosition(this.spawnX, this.resolveSpawnY(finish, container), 0);
         this.shiftNodeLeftEdgeTo(finish, container, this.spawnX);
         this.configureFinishColliders(finish);
+        this.normalizeFinishTriggerCollider(finish);
         this.activeFinish = finish;
         RunnerGameManager.markFinishSpawned();
     }
@@ -114,14 +130,88 @@ export class RunnerFinishSpawner extends Component {
             return;
         }
 
+        if (this.finishTriggerCommitted || RunnerGameManager.isFinishing || RunnerGameManager.isFinished) {
+            return;
+        }
+
         const position = this.activeFinish.position;
         const nextX = position.x - this.scrollSpeed * deltaTime;
         this.activeFinish.setPosition(nextX, position.y, position.z);
 
-        if (nextX <= this.leftBound) {
+        if (this.tryCommitFinishTrigger(this.activeFinish)) {
+            return;
+        }
+
+        const container = this.resolveSpawnContainer();
+        const finishVisualBounds = this.resolveFinishVisualBounds(container, this.activeFinish);
+        const hasLeftVisibleArea = finishVisualBounds ? finishVisualBounds.xMax <= this.leftBound : nextX <= this.leftBound;
+
+        if (hasLeftVisibleArea) {
+            const finishTriggerXWorld = this.resolveFinishTriggerXWorld(this.activeFinish);
+            const playerTriggerXWorld = this.resolvePlayerTriggerXWorld();
+            const hasPassedPlayer =
+                finishTriggerXWorld !== null &&
+                playerTriggerXWorld !== null &&
+                finishTriggerXWorld <= playerTriggerXWorld + this.finishDestroySafetyPadding;
+
+            if (hasPassedPlayer && this.tryCommitFinishTrigger(this.activeFinish)) {
+                return;
+            }
+
             this.activeFinish.destroy();
             this.activeFinish = null;
         }
+    }
+
+    private tryTriggerFinishByProximity() {
+        if (
+            !this.useProximityFinishTrigger ||
+            !this.activeFinish?.isValid ||
+            this.finishTriggerCommitted ||
+            RunnerGameManager.isFinishing
+        ) {
+            return;
+        }
+
+        if (this.tryCommitFinishTrigger(this.activeFinish)) {
+            return;
+        }
+
+        const container = this.resolveSpawnContainer();
+        const playerX = this.resolvePlayerX(container);
+        const finishTriggerX = this.resolveFinishTriggerX(this.activeFinish, container);
+
+        if (finishTriggerX === null) {
+            return;
+        }
+
+        if (finishTriggerX <= playerX + this.finishTriggerLeadDistance) {
+            this.commitFinishTrigger(this.activeFinish);
+        }
+    }
+
+    private tryCommitFinishTrigger(finishNode: Node) {
+        const playerTriggerXWorld = this.resolvePlayerTriggerXWorld();
+        const finishTriggerXWorld = this.resolveFinishTriggerXWorld(finishNode);
+        if (playerTriggerXWorld === null || finishTriggerXWorld === null) {
+            return false;
+        }
+
+        if (finishTriggerXWorld > playerTriggerXWorld + this.finishTriggerLeadDistance) {
+            return false;
+        }
+
+        this.commitFinishTrigger(finishNode);
+        return true;
+    }
+
+    private commitFinishTrigger(finishNode: Node) {
+        if (this.finishTriggerCommitted || RunnerGameManager.isFinishing || RunnerGameManager.isFinished) {
+            return;
+        }
+
+        this.finishTriggerCommitted = true;
+        RunnerGameManager.finishGame(this.resolveFinishDelay(), finishNode);
     }
 
     private configureFinishColliders(node: Node) {
@@ -133,8 +223,26 @@ export class RunnerFinishSpawner extends Component {
         node.children.forEach((child) => this.configureFinishColliders(child));
     }
 
+    private normalizeFinishTriggerCollider(node: Node) {
+        const triggerNode = this.findFinishTriggerNode(node);
+        if (!triggerNode) {
+            return;
+        }
+
+        const transform = triggerNode.getComponent(UITransform);
+        const collider = triggerNode.getComponent(BoxCollider2D);
+        if (!transform || !collider) {
+            return;
+        }
+
+        collider.tag = this.finishTag;
+        collider.sensor = true;
+        collider.offset = new Vec2(0, 0);
+        collider.size = new Size(transform.width, transform.height);
+    }
+
     private placeBehindTarget(finish: Node, container: Node) {
-        const target = this.resolveRenderBeforeNode(container);
+        const target = this.resolveRenderableNode(container);
         if (!target || target.parent !== container) {
             return;
         }
@@ -148,7 +256,7 @@ export class RunnerFinishSpawner extends Component {
             return;
         }
 
-        const player = this.resolveRenderBeforeNode(container);
+        const player = this.resolveRenderableNode(container);
         if (player?.parent === container) {
             player.setSiblingIndex(container.children.length - 1);
         }
@@ -160,6 +268,25 @@ export class RunnerFinishSpawner extends Component {
         }
 
         return this.findPlayerNode(container);
+    }
+
+    private resolveRenderableNode(container: Node) {
+        const target = this.resolveRenderBeforeNode(container);
+        if (!target) {
+            return null;
+        }
+
+        return this.resolveTopLevelChildInContainer(target, container);
+    }
+
+    private resolveTopLevelChildInContainer(target: Node, container: Node) {
+        let current: Node | null = target;
+
+        while (current?.parent && current.parent !== container) {
+            current = current.parent;
+        }
+
+        return current?.parent === container ? current : null;
     }
 
     private findPlayerNode(node: Node): Node | null {
@@ -246,13 +373,14 @@ export class RunnerFinishSpawner extends Component {
             return null;
         }
 
-        if (this.cachedFloorOffsetFromGround === null) {
-            const player = this.resolvePlayerNode();
-            const playerY = player ? this.resolveNodeYInContainer(player, container) : null;
-            if (playerY === null) {
-                return null;
-            }
+        const player = this.resolvePlayerNode();
+        const playerY = player ? this.resolveNodeYInContainer(player, container) : null;
+        if (playerY === null) {
+            return null;
+        }
 
+        const playerController = player?.getComponent(RunnerPlayerController);
+        if (this.cachedFloorOffsetFromGround === null || playerController?.isSpawnGrounded()) {
             this.cachedFloorOffsetFromGround = playerY - currentGroundY;
         }
 
@@ -305,6 +433,11 @@ export class RunnerFinishSpawner extends Component {
 
         const controller = player.getComponent(RunnerPlayerController);
         return this.resolveNodeXInContainer(player, container) ?? controller?.fixedX ?? player.position.x;
+    }
+
+    private resolveFinishDelay() {
+        const player = this.resolvePlayerNode();
+        return player?.getComponent(RunnerPlayerController)?.finishStopDelay ?? 0;
     }
 
     private syncScrollSpeed() {
@@ -432,6 +565,170 @@ export class RunnerFinishSpawner extends Component {
 
         const worldBounds = transform.getBoundingBoxToWorld();
         return this.convertWorldRectToContainerRect(worldBounds, container);
+    }
+
+    private resolveFinishTriggerX(node: Node, container: Node) {
+        const triggerBounds = this.resolveNamedNodeBoundsInContainer(node, container, this.finishTriggerNodeName);
+        if (triggerBounds) {
+            return triggerBounds.xMin;
+        }
+
+        const colliders = node.getComponentsInChildren(Collider2D);
+        let minX: number | null = null;
+
+        for (const collider of colliders) {
+            if (collider.tag !== this.finishTag) {
+                continue;
+            }
+
+            const bounds = this.convertWorldRectToContainerRect(collider.worldAABB, container);
+            minX = minX === null ? bounds.xMin : Math.min(minX, bounds.xMin);
+        }
+
+        if (minX !== null) {
+            return minX;
+        }
+
+        const transforms = node.getComponentsInChildren(UITransform);
+        for (const transform of transforms) {
+            const bounds = this.convertWorldRectToContainerRect(transform.getBoundingBoxToWorld(), container);
+            minX = minX === null ? bounds.xMin : Math.min(minX, bounds.xMin);
+        }
+
+        return minX;
+    }
+
+    private resolvePlayerTriggerXWorld() {
+        return this.resolvePlayerTriggerBoundsWorld()?.xMax ?? null;
+    }
+
+    private resolveFinishTriggerXWorld(node: Node) {
+        return this.resolveFinishTriggerBoundsWorld(node)?.xMin ?? null;
+    }
+
+    private resolvePlayerTriggerBoundsWorld() {
+        const player = this.resolvePlayerNode();
+        if (!player) {
+            return null;
+        }
+
+        const colliderBounds = this.getCombinedWorldBounds(player.getComponents(Collider2D).map((collider) => collider.worldAABB));
+        if (colliderBounds) {
+            return colliderBounds;
+        }
+
+        const transform = player.getComponent(UITransform);
+        return transform ? transform.getBoundingBoxToWorld() : null;
+    }
+
+    private resolveFinishTriggerBoundsWorld(node: Node) {
+        const explicitTriggerBounds = this.resolveNamedNodeBoundsWorld(node, this.finishTriggerNodeName);
+        if (explicitTriggerBounds) {
+            return explicitTriggerBounds;
+        }
+
+        const colliderBounds = this.getCombinedWorldBounds(
+            node
+                .getComponentsInChildren(Collider2D)
+                .filter((collider) => collider.tag === this.finishTag)
+                .map((collider) => collider.worldAABB),
+        );
+
+        if (colliderBounds) {
+            return colliderBounds;
+        }
+
+        return this.getCombinedWorldBounds(
+            node.getComponentsInChildren(UITransform).map((transform) => transform.getBoundingBoxToWorld()),
+        );
+    }
+
+    private resolveFinishVisualBounds(container: Node, node: Node) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        for (const transform of node.getComponentsInChildren(UITransform)) {
+            const bounds = this.convertWorldRectToContainerRect(transform.getBoundingBoxToWorld(), container);
+            if (!Number.isFinite(bounds.xMin) || !Number.isFinite(bounds.xMax) || !Number.isFinite(bounds.yMin) || !Number.isFinite(bounds.yMax)) {
+                continue;
+            }
+
+            minX = Math.min(minX, bounds.xMin);
+            minY = Math.min(minY, bounds.yMin);
+            maxX = Math.max(maxX, bounds.xMax);
+            maxY = Math.max(maxY, bounds.yMax);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+        }
+
+        return new Rect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    private resolveNamedNodeBoundsInContainer(root: Node, container: Node, nodeName: string) {
+        const target = this.findNodeByName(root, nodeName);
+        if (!target) {
+            return null;
+        }
+
+        const transform = target.getComponent(UITransform);
+        if (!transform) {
+            return null;
+        }
+
+        return this.convertWorldRectToContainerRect(transform.getBoundingBoxToWorld(), container);
+    }
+
+    private resolveNamedNodeBoundsWorld(root: Node, nodeName: string) {
+        const target = this.findNodeByName(root, nodeName);
+        const transform = target?.getComponent(UITransform);
+        return transform ? transform.getBoundingBoxToWorld() : null;
+    }
+
+    private findFinishTriggerNode(root: Node) {
+        return this.findNodeByName(root, this.finishTriggerNodeName);
+    }
+
+    private findNodeByName(root: Node, nodeName: string): Node | null {
+        if (root.name === nodeName) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const found = this.findNodeByName(child, nodeName);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private getCombinedWorldBounds(boundsList: Rect[]) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        for (const bounds of boundsList) {
+            if (!Number.isFinite(bounds.xMin) || !Number.isFinite(bounds.xMax) || !Number.isFinite(bounds.yMin) || !Number.isFinite(bounds.yMax)) {
+                continue;
+            }
+
+            minX = Math.min(minX, bounds.xMin);
+            minY = Math.min(minY, bounds.yMin);
+            maxX = Math.max(maxX, bounds.xMax);
+            maxY = Math.max(maxY, bounds.yMax);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+        }
+
+        return new Rect(minX, minY, maxX - minX, maxY - minY);
     }
 
     private convertWorldRectToContainerRect(worldRect: Rect, container: Node) {

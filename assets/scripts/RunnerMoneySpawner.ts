@@ -1,5 +1,6 @@
 import { _decorator, CCFloat, Camera, Component, instantiate, Node, Prefab, randomRange, Rect, UITransform, Vec3, view } from 'cc';
 import { RunnerGameManager } from './RunnerGameManager';
+import { RunnerPlayerController } from './RunnerPlayerController';
 import { RunnerScrollLoop } from './RunnerScrollLoop';
 
 const { ccclass, property } = _decorator;
@@ -45,10 +46,19 @@ export class RunnerMoneySpawner extends Component {
     @property
     spawnImmediately = false;
 
+    @property
+    alignSpawnYToPlayer = true;
+
+    @property
+    moneyYOffsetFromPlayer = 0;
+
     private distanceToNextSpawn = 0;
     private spawnIndex = 0;
     private activePatterns: Node[] = [];
     private cachedCamera: Camera | null = null;
+    private cachedPlayerNode: Node | null = null;
+    private cachedGroundNode: Node | null = null;
+    private cachedFloorOffsetFromGround: number | null = null;
 
     onLoad() {
         this.distanceToNextSpawn = this.spawnImmediately ? 0 : this.getNextDistance();
@@ -81,7 +91,7 @@ export class RunnerMoneySpawner extends Component {
         const prefab = this.moneyPrefabs[this.spawnIndex % this.moneyPrefabs.length];
         const pattern = instantiate(prefab);
         const container = this.resolveSpawnContainer();
-        const spawnY = this.getSpawnY();
+        const spawnY = this.getSpawnY(container);
 
         container.addChild(pattern);
         pattern.setPosition(this.spawnX, spawnY, 0);
@@ -143,13 +153,43 @@ export class RunnerMoneySpawner extends Component {
         return Math.max(1, distance);
     }
 
-    private getSpawnY() {
+    private getSpawnY(container: Node) {
         if (this.spawnYPositions.length === 0) {
-            return 0;
+            return this.resolvePlayerAlignedY(container, 0) ?? 0;
         }
 
         const y = this.spawnYPositions[this.spawnIndex % this.spawnYPositions.length];
-        return Number.isFinite(y) ? y : randomRange(-40, 150);
+        const fallbackY = Number.isFinite(y) ? y : randomRange(-40, 150);
+        return this.resolvePlayerAlignedY(container, fallbackY) ?? fallbackY;
+    }
+
+    private resolvePlayerAlignedY(container: Node, fallbackY: number) {
+        if (!this.alignSpawnYToPlayer) {
+            return fallbackY;
+        }
+
+        const player = this.resolvePlayerNode();
+        if (!player) {
+            return fallbackY;
+        }
+
+        const playerY = this.resolveNodeYInContainer(player, container);
+        if (playerY === null) {
+            return fallbackY;
+        }
+
+        const ground = this.resolveGroundNode();
+        const groundY = ground ? this.resolveNodeYInContainer(ground, container) : null;
+        if (groundY === null) {
+            return fallbackY;
+        }
+
+        const playerController = player.getComponent(RunnerPlayerController);
+        if (this.cachedFloorOffsetFromGround === null || playerController?.isSpawnGrounded()) {
+            this.cachedFloorOffsetFromGround = playerY - groundY;
+        }
+
+        return groundY + this.cachedFloorOffsetFromGround + fallbackY + this.moneyYOffsetFromPlayer;
     }
 
     private resolveSpawnContainer() {
@@ -247,6 +287,52 @@ export class RunnerMoneySpawner extends Component {
         }
 
         return null;
+    }
+
+    private resolvePlayerNode() {
+        if (this.cachedPlayerNode?.isValid) {
+            return this.cachedPlayerNode;
+        }
+
+        this.cachedPlayerNode = this.findPlayerNode(this.node.scene ?? this.node);
+        return this.cachedPlayerNode;
+    }
+
+    private findPlayerNode(root: Node): Node | null {
+        if (root.getComponent(RunnerPlayerController)) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const player = this.findPlayerNode(child);
+            if (player) {
+                return player;
+            }
+        }
+
+        return null;
+    }
+
+    private resolveGroundNode() {
+        if (this.cachedGroundNode?.isValid) {
+            return this.cachedGroundNode;
+        }
+
+        const world = this.node.parent ?? this.node.scene ?? this.node;
+        this.cachedGroundNode = world.getChildByName('Ground');
+        return this.cachedGroundNode;
+    }
+
+    private resolveNodeYInContainer(target: Node, container: Node) {
+        const worldPosition = target.worldPosition;
+        const containerTransform = container.getComponent(UITransform);
+        if (containerTransform) {
+            return containerTransform.convertToNodeSpaceAR(worldPosition).y;
+        }
+
+        const localPosition = new Vec3();
+        container.inverseTransformPoint(localPosition, worldPosition);
+        return localPosition.y;
     }
 
     private getNodeRightEdgeInParent(node: Node) {

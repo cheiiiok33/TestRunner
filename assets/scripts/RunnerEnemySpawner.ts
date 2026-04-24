@@ -341,13 +341,14 @@ export class RunnerEnemySpawner extends Component {
             return null;
         }
 
-        if (this.cachedFloorOffsetFromGround === null) {
-            const target = this.resolveFirstEnemyHintTarget();
-            const targetY = target ? this.resolveNodeYInContainer(target, container) : null;
-            if (targetY === null) {
-                return null;
-            }
+        const target = this.resolveFirstEnemyHintTarget();
+        const targetY = target ? this.resolveNodeYInContainer(target, container) : null;
+        if (targetY === null) {
+            return null;
+        }
 
+        const playerController = target?.getComponent(RunnerPlayerController);
+        if (this.cachedFloorOffsetFromGround === null || playerController?.isSpawnGrounded()) {
             this.cachedFloorOffsetFromGround = targetY - currentGroundY;
         }
 
