@@ -364,7 +364,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "tree",
+    "_name": "Tree_01",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -473,7 +473,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (5)",
+    "_name": "Tree_02",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -582,7 +582,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (8)",
+    "_name": "Bush_01",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -691,7 +691,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (6)",
+    "_name": "LampPost",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -800,7 +800,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (7)",
+    "_name": "Bush_02",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -909,7 +909,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (9)",
+    "_name": "Bush_03",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1018,7 +1018,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (5)-001",
+    "_name": "Tree_03",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1127,7 +1127,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (9)-001",
+    "_name": "Bush_04",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1397,7 +1397,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "tree",
+    "_name": "Tree_01",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1506,7 +1506,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (5)",
+    "_name": "Tree_02",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1615,7 +1615,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (8)",
+    "_name": "Tree_03",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1724,7 +1724,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (6)",
+    "_name": "LampPost",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1833,7 +1833,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (7)",
+    "_name": "Bush_01",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1942,7 +1942,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (9)",
+    "_name": "Bush_02",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -2051,7 +2051,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (8)-001",
+    "_name": "Bush_03",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -2160,7 +2160,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Без названия (7)-001",
+    "_name": "Bush_04",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -2269,7 +2269,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "tree-001",
+    "_name": "Tree_04",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -2777,6 +2777,7 @@
     "useProximityFinishTrigger": true,
     "finishTriggerLeadDistance": 40,
     "finishDestroySafetyPadding": 120,
+    "finishTriggerNodeName": "ribbon",
     "_id": "5915uN7WNGuoKLssa5tZcD"
   },
   {
@@ -2836,7 +2837,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Hero_0022_Слой-24",
+    "_name": "Player",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -3952,7 +3953,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Hand",
+    "_name": "HintFinger",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -4382,7 +4383,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "pupupu",
+    "_name": "CtaPanel",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
