@@ -32,7 +32,7 @@ export class RunnerFinishSpawner extends Component {
     spawnY = 0;
 
     @property
-    scrollSpeed = 320;
+    scrollSpeed = 1040;
 
     @property
     leftBound = -1800;
@@ -135,7 +135,7 @@ export class RunnerFinishSpawner extends Component {
         }
 
         const position = this.activeFinish.position;
-        const nextX = position.x - this.scrollSpeed * deltaTime;
+        const nextX = position.x - this.scrollSpeed * RunnerGameManager.getSpeedMultiplier() * deltaTime;
         this.activeFinish.setPosition(nextX, position.y, position.z);
 
         if (this.tryCommitFinishTrigger(this.activeFinish)) {

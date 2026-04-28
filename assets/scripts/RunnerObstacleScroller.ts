@@ -9,7 +9,7 @@ const { ccclass, property } = _decorator;
 @ccclass('RunnerObstacleScroller')
 export class RunnerObstacleScroller extends Component {
     @property
-    scrollSpeed = 320;
+    scrollSpeed = 1080;
 
     @property
     extraMoveSpeed = 0;
@@ -96,8 +96,10 @@ export class RunnerObstacleScroller extends Component {
                 this.scrollSpeed;
         }
 
+        const effectiveSpeed = this.scrollSpeed * RunnerGameManager.getSpeedMultiplier();
+
         const position = this.node.position;
-        const nextX = position.x - (this.scrollSpeed + this.extraMoveSpeed) * deltaTime;
+        const nextX = position.x - (effectiveSpeed + this.extraMoveSpeed) * deltaTime;
         this.node.setPosition(nextX, position.y, position.z);
 
         if (this.shouldTriggerFirstEnemyHint(nextX) && RunnerGameManager.pauseForFirstEnemy()) {

@@ -77,10 +77,10 @@ export class RunnerEnemySpawner extends Component {
     letSpawnWeight = 1;
 
     @property
-    scrollSpeed = 320;
+    scrollSpeed = 1080;
 
     @property
-    enemyExtraMoveSpeed = 80;
+    enemyExtraMoveSpeed = 560;
 
     @property
     letExtraMoveSpeed = 0;
@@ -139,7 +139,8 @@ export class RunnerEnemySpawner extends Component {
             return;
         }
 
-        this.distanceToNextSpawn -= this.scrollSpeed * deltaTime;
+        const effectiveSpeed = this.scrollSpeed * RunnerGameManager.getSpeedMultiplier();
+        this.distanceToNextSpawn -= effectiveSpeed * deltaTime;
         if (this.distanceToNextSpawn > 0) {
             return;
         }

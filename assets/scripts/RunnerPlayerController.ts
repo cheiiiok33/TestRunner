@@ -25,6 +25,8 @@ const { ccclass, property } = _decorator;
 
 @ccclass('RunnerPlayerController')
 export class RunnerPlayerController extends Component {
+    private static instance: RunnerPlayerController | null = null;
+
     @property(Animation)
     animation: Animation | null = null;
 
@@ -37,6 +39,9 @@ export class RunnerPlayerController extends Component {
     @property
     jumpClipName = 'jump';
 
+    @property
+    takeDamageClipName = 'TakeDamage';
+
     @property(SpriteFrame)
     groundSpriteFrame: SpriteFrame | null = null;
 
@@ -48,6 +53,15 @@ export class RunnerPlayerController extends Component {
 
     @property
     maxFallSpeed = 1200;
+
+    @property
+    baseGravityScale = 5.5;
+
+    @property
+    riseGravityMultiplier = 1.15;
+
+    @property
+    fallGravityMultiplier = 2.4;
 
     @property
     groundTag = 1;
@@ -65,7 +79,7 @@ export class RunnerPlayerController extends Component {
     finishTag = 5;
 
     @property
-    finishStopDelay = 0.5;
+    finishStopDelay = 0.4;
 
     private body: RigidBody2D | null = null;
     private collider: Collider2D | null = null;
@@ -74,14 +88,17 @@ export class RunnerPlayerController extends Component {
     private wasGrounded = false;
     private isJumping = false;
     private stoppedByFinish = false;
+    private waitingForFinishLanding = false;
     private jumpUnlocked = false;
     private hasStartedRun = false;
     private currentClipName = '';
+    private damageAnimationUntil = 0;
     private readonly preventContextMenu = (event: Event) => {
         event.preventDefault();
     };
 
     onLoad() {
+        RunnerPlayerController.instance = this;
         this.body = this.getComponent(RigidBody2D);
         this.collider = this.getComponent(Collider2D);
         this.sprite = this.getComponent(Sprite);
@@ -94,10 +111,6 @@ export class RunnerPlayerController extends Component {
             this.groundSpriteFrame = this.sprite.spriteFrame;
         }
 
-        if (this.sprite) {
-            this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-        }
-
         if (!this.body) {
             console.warn('[RunnerPlayerController] Add RigidBody2D to the player node.');
             return;
@@ -108,7 +121,7 @@ export class RunnerPlayerController extends Component {
         }
 
         this.body.enabledContactListener = true;
-        this.body.gravityScale = 2.5;
+        this.body.gravityScale = this.baseGravityScale;
         this.body.fixedRotation = true;
         this.node.setPosition(this.fixedX, this.node.position.y, this.node.position.z);
 
@@ -128,6 +141,10 @@ export class RunnerPlayerController extends Component {
     }
 
     onDestroy() {
+        if (RunnerPlayerController.instance === this) {
+            RunnerPlayerController.instance = null;
+        }
+
         input.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
         input.off(Input.EventType.MOUSE_DOWN, this.onMouseDown, this);
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
@@ -186,13 +203,23 @@ export class RunnerPlayerController extends Component {
         this.wasGrounded = grounded;
 
         const velocity = this.body.linearVelocity;
+        this.body.gravityScale = this.resolveCurrentGravityScale(velocity.y);
         const limitedFallSpeed = Math.max(velocity.y, -this.maxFallSpeed);
         this.body.linearVelocity = new Vec2(0, limitedFallSpeed);
+
+        if (this.damageAnimationUntil > 0 && Date.now() >= this.damageAnimationUntil) {
+            this.damageAnimationUntil = 0;
+            this.restoreAnimationState();
+        }
 
         const position = this.node.position;
         if (Math.abs(position.x - this.fixedX) > 0.01) {
             this.node.setPosition(this.fixedX, position.y, position.z);
         }
+    }
+
+    static playDamageAnimation() {
+        RunnerPlayerController.instance?.triggerDamageAnimation();
     }
 
     private tryJump() {
@@ -259,21 +286,33 @@ export class RunnerPlayerController extends Component {
             return;
         }
 
-        this.stoppedByFinish = true;
-        this.isJumping = false;
-        this.body.linearVelocity = new Vec2(0, 0);
-        this.body.angularVelocity = 0;
-        this.body.gravityScale = 0;
-        this.playIdleAnimation();
+        if (!this.isGrounded()) {
+            this.waitingForFinishLanding = true;
+            this.body.angularVelocity = 0;
+            return;
+        }
+
+        this.completeFinishStop();
     }
 
     private updateFinishPosition() {
-        if (!this.body || !this.stoppedByFinish) {
+        if (!this.body) {
+            return;
+        }
+
+        if (this.waitingForFinishLanding) {
+            this.body.angularVelocity = 0;
+            if (this.isGrounded()) {
+                this.completeFinishStop();
+            }
+            return;
+        }
+
+        if (!this.stoppedByFinish) {
             return;
         }
 
         this.body.angularVelocity = 0;
-
         this.body.linearVelocity = new Vec2(0, 0);
         this.body.gravityScale = 0;
 
@@ -319,6 +358,10 @@ export class RunnerPlayerController extends Component {
     }
 
     private playGroundAnimation() {
+        if (this.damageAnimationUntil > 0) {
+            return;
+        }
+
         if (this.animation) {
             this.animation.stop();
         }
@@ -334,12 +377,65 @@ export class RunnerPlayerController extends Component {
     }
 
     private calculateJumpVelocity() {
-        if (!this.body) {
-            return 0;
+        const gravity = 980 * this.baseGravityScale * this.riseGravityMultiplier;
+        return Math.sqrt(2 * gravity * this.jumpHeight);
+    }
+
+    private triggerDamageAnimation() {
+        if (!this.animation || this.currentClipName === this.takeDamageClipName) {
+            return;
         }
 
-        const gravity = 980 * this.body.gravityScale;
-        return Math.sqrt(2 * gravity * this.jumpHeight);
+        const state = this.animation.getState(this.takeDamageClipName);
+        if (!state) {
+            return;
+        }
+
+        this.animation.play(this.takeDamageClipName);
+        this.currentClipName = this.takeDamageClipName;
+
+        const clipDuration = state.duration / Math.max(0.001, state.speed || 1);
+        this.damageAnimationUntil = Date.now() + clipDuration * 1000;
+    }
+
+    private restoreAnimationState() {
+        if (this.isJumping && !this.isGrounded()) {
+            this.playJumpAnimation();
+            return;
+        }
+
+        if (RunnerGameManager.isStarted) {
+            this.playGroundAnimation();
+            return;
+        }
+
+        this.playIdleAnimation();
+    }
+
+    private completeFinishStop() {
+        if (!this.body) {
+            return;
+        }
+
+        this.waitingForFinishLanding = false;
+        this.stoppedByFinish = true;
+        this.isJumping = false;
+        this.body.linearVelocity = new Vec2(0, 0);
+        this.body.angularVelocity = 0;
+        this.body.gravityScale = 0;
+        this.playIdleAnimation();
+    }
+
+    private resolveCurrentGravityScale(verticalVelocity: number) {
+        if (verticalVelocity < 0) {
+            return this.baseGravityScale * this.fallGravityMultiplier;
+        }
+
+        if (verticalVelocity > 0) {
+            return this.baseGravityScale * this.riseGravityMultiplier;
+        }
+
+        return this.baseGravityScale;
     }
 
     private onTouchStart() {

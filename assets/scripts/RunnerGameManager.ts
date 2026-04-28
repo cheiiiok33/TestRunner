@@ -25,6 +25,7 @@ import { RunnerEvadeButtonPulse } from './RunnerEvadeButtonPulse';
 import { RunnerGameOverScreen } from './RunnerGameOverScreen';
 import { RunnerDownloadButtonStretch } from './RunnerDownloadButtonStretch';
 import { RunnerFinishCelebration } from './RunnerFinishCelebration';
+import { RunnerPlayerController } from './RunnerPlayerController';
 import { RunnerStoreRedirect } from './RunnerStoreRedirect';
 
 const { ccclass, property } = _decorator;
@@ -64,6 +65,12 @@ export class RunnerGameManager extends Component {
     @property
     hideHintDuration = 0.2;
 
+    @property
+    speedRampStartMultiplier = 0.98;
+
+    @property
+    speedRampDuration = 1.4;
+
     @property([Node])
     hearts: Node[] = [];
 
@@ -92,7 +99,7 @@ export class RunnerGameManager extends Component {
     scorePrefix = '$';
 
     @property
-    collectFlyDuration = 0.5;
+    collectFlyDuration = 0.24;
 
     @property
     collectPopScale = 1.25;
@@ -185,6 +192,7 @@ export class RunnerGameManager extends Component {
     private score = 0;
     private failShown = false;
     private lastDamageTime = -Infinity;
+    private runElapsed = 0;
     private foneSource: AudioSource | null = null;
     private effectsSource: AudioSource | null = null;
     private playedLooseGame = false;
@@ -242,6 +250,14 @@ export class RunnerGameManager extends Component {
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         game.canvas?.removeEventListener('contextmenu', this.preventContextMenu);
         this.stopFone();
+    }
+
+    update(deltaTime: number) {
+        if (!RunnerGameManager.isStarted || RunnerGameManager.isFinished || RunnerGameManager.isFinishing) {
+            return;
+        }
+
+        this.runElapsed += deltaTime;
     }
 
     private playFingerPulse() {
@@ -312,6 +328,10 @@ export class RunnerGameManager extends Component {
         manager?.playEffect(manager.jump);
     }
 
+    static getSpeedMultiplier() {
+        return RunnerGameManager.instance?.resolveSpeedMultiplier() ?? 1;
+    }
+
     static markFinishSpawned() {
         RunnerGameManager.isFinishSpawned = true;
     }
@@ -358,12 +378,23 @@ export class RunnerGameManager extends Component {
         this.health = Math.max(0, this.health - amount);
         this.updateHearts(true);
         this.playEffect(this.damage);
+        RunnerPlayerController.playDamageAnimation();
 
         if (this.health <= 0) {
             RunnerGameManager.isStarted = false;
             this.showFail();
             return;
         }
+    }
+
+    private resolveSpeedMultiplier() {
+        if (this.speedRampDuration <= 0) {
+            return 1;
+        }
+
+        const startMultiplier = Math.min(1, Math.max(0.1, this.speedRampStartMultiplier));
+        const progress = Math.min(1, this.runElapsed / this.speedRampDuration);
+        return startMultiplier + (1 - startMultiplier) * progress;
     }
 
     private resolveMaxHealth() {

@@ -111,6 +111,7 @@ export class PlayableResponsiveLayout extends Component {
     private lastViewportHeight = 0;
     private heroBaseX = 0;
     private heroBaseY = 0;
+    private readonly heroBaseScale = new Vec3(1, 1, 1);
     private groundBaseY = 0;
     private readonly handBaseScale = new Vec3(1, 1, 1);
     private readonly backgroundBaseSizes = new WeakMap<Node, Size>();
@@ -129,6 +130,9 @@ export class PlayableResponsiveLayout extends Component {
         this.ground = this.ground ?? this.node.scene?.getChildByName('Ground') ?? this.node.getChildByName('Ground');
         this.heroBaseX = this.hero?.position.x ?? 0;
         this.heroBaseY = this.hero?.position.y ?? 0;
+        if (this.hero) {
+            this.heroBaseScale.set(this.hero.scale);
+        }
         this.groundBaseY = this.ground?.position.y ?? 0;
         const playerController = this.hero?.getComponent(RunnerPlayerController);
         if (this.hero && playerController) {
@@ -372,24 +376,28 @@ export class PlayableResponsiveLayout extends Component {
         if (this.hero) {
             const x = this.resolveHeroX(isPortrait);
             const y = this.resolveHeroY(isPortrait);
-            const scale = isPortrait ? this.portraitHeroScale : this.landscapeHeroScale;
+            const scaleMultiplier = isPortrait ? this.portraitHeroScale : this.landscapeHeroScale;
             const playerController = this.hero.getComponent(RunnerPlayerController);
             const safeX = x;
             if (playerController) {
                 playerController.fixedX = safeX;
             }
             this.hero.setPosition(safeX, RunnerGameManager.isStarted ? this.hero.position.y : y, this.hero.position.z);
-            this.hero.setScale(scale, scale, this.hero.scale.z);
+            this.hero.setScale(
+                this.heroBaseScale.x * scaleMultiplier,
+                this.heroBaseScale.y * scaleMultiplier,
+                this.heroBaseScale.z,
+            );
         }
 
         if (this.tapHint) {
-            this.tapHint.setPosition(0, isPortrait ? 120 : 80, this.tapHint.position.z);
+            this.tapHint.setPosition(0, isPortrait ? 180 : 110, this.tapHint.position.z);
             const scale = isPortrait ? 0.8 : 1;
             this.tapHint.setScale(scale, scale, this.tapHint.scale.z);
         }
 
         if (this.hand) {
-            this.hand.setPosition(0, isPortrait ? -120 : -80, this.hand.position.z);
+            this.hand.setPosition(0, isPortrait ? -190 : -120, this.hand.position.z);
             const scale = isPortrait ? 0.65 : 1;
             this.hand.setScale(
                 this.handBaseScale.x * scale,

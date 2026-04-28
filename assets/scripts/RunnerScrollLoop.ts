@@ -48,8 +48,10 @@ export class RunnerScrollLoop extends Component {
             this.scrollSpeed = this.followTarget.getComponent(RunnerScrollLoop)?.scrollSpeed ?? this.scrollSpeed;
         }
 
+        const effectiveSpeed = this.scrollSpeed * RunnerGameManager.getSpeedMultiplier();
+
         const currentPosition = this.useLocalPosition ? this.node.position : this.node.worldPosition;
-        const nextX = currentPosition.x - this.scrollSpeed * deltaTime;
+        const nextX = currentPosition.x - effectiveSpeed * deltaTime;
 
         if (this.useLocalPosition) {
             this.node.setPosition(nextX, currentPosition.y, currentPosition.z);

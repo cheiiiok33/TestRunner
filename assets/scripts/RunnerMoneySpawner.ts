@@ -26,7 +26,7 @@ export class RunnerMoneySpawner extends Component {
     spawnDistances: number[] = [650, 1050, 1450];
 
     @property
-    scrollSpeed = 320;
+    scrollSpeed = 1040;
 
     @property
     leftBound = -900;
@@ -78,7 +78,8 @@ export class RunnerMoneySpawner extends Component {
             return;
         }
 
-        this.distanceToNextSpawn -= this.scrollSpeed * deltaTime;
+        const effectiveSpeed = this.scrollSpeed * RunnerGameManager.getSpeedMultiplier();
+        this.distanceToNextSpawn -= effectiveSpeed * deltaTime;
         if (this.distanceToNextSpawn > 0) {
             return;
         }
@@ -109,7 +110,7 @@ export class RunnerMoneySpawner extends Component {
             }
 
             const position = pattern.position;
-            const nextX = position.x - this.scrollSpeed * deltaTime;
+            const nextX = position.x - this.scrollSpeed * RunnerGameManager.getSpeedMultiplier() * deltaTime;
             pattern.setPosition(nextX, position.y, position.z);
 
             if (this.getNodeRightEdgeInParent(pattern) > this.leftBound) {
