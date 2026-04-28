@@ -129,7 +129,7 @@ export class RunnerObstacleScroller extends Component {
 
         const state = this.animation.getState(this.walkAnimationName);
         if (state) {
-            state.speed = 1;
+            state.speed = this.resolveWalkAnimationSpeed();
             if (!state.isPlaying) {
                 this.animation.play(this.walkAnimationName);
             }
@@ -139,7 +139,7 @@ export class RunnerObstacleScroller extends Component {
         const defaultClip = this.animation.defaultClip;
         const defaultState = defaultClip ? this.animation.getState(defaultClip.name) : null;
         if (defaultState) {
-            defaultState.speed = 1;
+            defaultState.speed = this.resolveWalkAnimationSpeed();
         }
         if (defaultClip && !defaultState?.isPlaying) {
             this.animation.play(defaultClip.name);
@@ -184,6 +184,10 @@ export class RunnerObstacleScroller extends Component {
         const playerController = this.firstEnemyHintTarget.getComponent(RunnerPlayerController);
         const targetX = playerController?.fixedX ?? this.firstEnemyHintTarget.position.x;
         return nextX <= targetX + this.firstEnemyHintLeadDistance;
+    }
+
+    private resolveWalkAnimationSpeed() {
+        return 1 + Math.max(0, RunnerGameManager.getSpeedMultiplier() - 1) * 0.35;
     }
 
     private getNodeRightEdgeInParent() {

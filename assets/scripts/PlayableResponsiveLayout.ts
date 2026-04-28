@@ -439,8 +439,8 @@ export class PlayableResponsiveLayout extends Component {
 
                 const overlap = Math.max(0, this.backgroundTileOverlap);
                 const bleed = Math.max(0, this.backgroundTileBleed);
-                const targetWidth = Math.max(baseSize.width, visibleWidth + bleed * 2 + overlap + 32);
-                const targetHeight = Math.max(baseSize.height, visibleHeight);
+                const targetWidth = Math.round(Math.max(baseSize.width, visibleWidth + bleed * 2 + overlap + 32));
+                const targetHeight = Math.round(Math.max(baseSize.height, visibleHeight));
 
                 if (Math.abs(transform.width - targetWidth) > 0.5 || Math.abs(transform.height - targetHeight) > 0.5) {
                     transform.setContentSize(targetWidth, targetHeight);
@@ -450,13 +450,15 @@ export class PlayableResponsiveLayout extends Component {
             const visualWidth = transform ? transform.width : this.backgroundTileWidth;
             const overlap = Math.max(0, this.backgroundTileOverlap);
             const bleed = Math.max(0, this.backgroundTileBleed);
-            const spacing = Math.max(1, visualWidth - overlap);
-            background.setPosition(index * spacing - bleed, 0, background.position.z);
+            const spacing = Math.round(Math.max(1, visualWidth - overlap));
+            const backgroundX = Math.round(index * spacing - bleed);
+            background.setPosition(backgroundX, 0, background.position.z);
 
             const scroller = background.getComponent(RunnerScrollLoop);
             if (scroller) {
                 scroller.autoLoopOverlap = overlap;
                 scroller.autoLoopLeadBleed = bleed;
+                scroller.syncLoopLayout();
             }
         });
     }

@@ -29,6 +29,12 @@ export class RunnerScrollLoop extends Component {
     @property
     useLocalPosition = true;
 
+    @property
+    pixelSnap = true;
+
+    @property
+    pixelSnapStep = 1;
+
     @property(Node)
     followTarget: Node | null = null;
 
@@ -37,6 +43,15 @@ export class RunnerScrollLoop extends Component {
 
     onLoad() {
         this.refreshLoopMetrics();
+    }
+
+    start() {
+        this.alignSiblingLoops();
+    }
+
+    public syncLoopLayout() {
+        this.refreshLoopMetrics();
+        this.alignSiblingLoops();
     }
 
     update(deltaTime: number) {
@@ -51,7 +66,7 @@ export class RunnerScrollLoop extends Component {
         const effectiveSpeed = this.scrollSpeed * RunnerGameManager.getSpeedMultiplier();
 
         const currentPosition = this.useLocalPosition ? this.node.position : this.node.worldPosition;
-        const nextX = currentPosition.x - effectiveSpeed * deltaTime;
+        const nextX = this.snapAxis(currentPosition.x - effectiveSpeed * deltaTime);
 
         if (this.useLocalPosition) {
             this.node.setPosition(nextX, currentPosition.y, currentPosition.z);
@@ -64,12 +79,20 @@ export class RunnerScrollLoop extends Component {
             return;
         }
 
-        const resetPosition = new Vec3(this.getResetX(), currentPosition.y, currentPosition.z);
+        const resetPosition = new Vec3(this.snapAxis(this.getResetX()), currentPosition.y, currentPosition.z);
         if (this.useLocalPosition) {
             this.node.setPosition(resetPosition);
         } else {
             this.node.setWorldPosition(resetPosition);
         }
+    }
+
+    lateUpdate() {
+        if (!RunnerGameManager.isStarted || !this.useAutoLoop) {
+            return;
+        }
+
+        this.alignSiblingLoops();
     }
 
     private getResetX() {
@@ -142,5 +165,54 @@ export class RunnerScrollLoop extends Component {
         }
 
         return trailingX;
+    }
+
+    private alignSiblingLoops() {
+        if (!this.useAutoLoop) {
+            return;
+        }
+
+        const parent = this.node.parent;
+        if (!parent) {
+            return;
+        }
+
+        this.refreshLoopMetrics();
+
+        const loops = parent.children
+            .filter((child) => child.isValid && child.getComponent(RunnerScrollLoop))
+            .sort((left, right) => {
+                const leftPos = this.useLocalPosition ? left.position.x : left.worldPosition.x;
+                const rightPos = this.useLocalPosition ? right.position.x : right.worldPosition.x;
+                return leftPos - rightPos;
+            });
+
+        if (loops.length <= 1) {
+            return;
+        }
+
+        let previousX = this.useLocalPosition ? loops[0].position.x : loops[0].worldPosition.x;
+        for (let index = 1; index < loops.length; index += 1) {
+            const loop = loops[index];
+            const current = this.useLocalPosition ? loop.position : loop.worldPosition;
+            const alignedX = this.snapAxis(previousX + this.cachedStepWidth);
+
+            if (this.useLocalPosition) {
+                loop.setPosition(alignedX, current.y, current.z);
+            } else {
+                loop.setWorldPosition(alignedX, current.y, current.z);
+            }
+
+            previousX = alignedX;
+        }
+    }
+
+    private snapAxis(value: number) {
+        if (!this.pixelSnap) {
+            return value;
+        }
+
+        const step = Math.max(0.0001, this.pixelSnapStep);
+        return Math.round(value / step) * step;
     }
 }

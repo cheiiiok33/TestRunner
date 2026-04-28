@@ -71,6 +71,9 @@ export class RunnerGameManager extends Component {
     @property
     speedRampDuration = 1.4;
 
+    @property
+    speedRampEndMultiplier = 1.12;
+
     @property([Node])
     hearts: Node[] = [];
 
@@ -389,12 +392,13 @@ export class RunnerGameManager extends Component {
 
     private resolveSpeedMultiplier() {
         if (this.speedRampDuration <= 0) {
-            return 1;
+            return Math.max(0.1, this.speedRampEndMultiplier);
         }
 
         const startMultiplier = Math.min(1, Math.max(0.1, this.speedRampStartMultiplier));
+        const endMultiplier = Math.max(startMultiplier, this.speedRampEndMultiplier);
         const progress = Math.min(1, this.runElapsed / this.speedRampDuration);
-        return startMultiplier + (1 - startMultiplier) * progress;
+        return startMultiplier + (endMultiplier - startMultiplier) * progress;
     }
 
     private resolveMaxHealth() {
